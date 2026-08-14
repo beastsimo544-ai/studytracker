@@ -1,38 +1,121 @@
+
+
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+
+type StudySession = {
+  id: string;
+  subject: string;
+  duration: number;
+  date: string;
+};
+
+export default function Dashboard() {
+  const [sessions, setSessions] = useState<StudySession[]>([]);
+
+ useEffect(() => {
+  const savedSessions = JSON.parse(
+    localStorage.getItem("studySessions") || "[]"
+  );
+
+  setTimeout(() => {
+    setSessions(savedSessions);
+  }, 0);
+}, []);
+   const today = new Date();
+
+const todaySeconds = sessions
+  .filter((session) => {
+    const sessionDate = new Date(session.date);
+
+    return (
+      sessionDate.getFullYear() === today.getFullYear() &&
+      sessionDate.getMonth() === today.getMonth() &&
+      sessionDate.getDate() === today.getDate()
+    );
+  })
+  .reduce((total, session) => total + session.duration, 0);
+
+const startOfWeek = new Date(today);
+const day = today.getDay();
+
+const daysSinceMonday = day === 0 ? 6 : day - 1;
+
+startOfWeek.setDate(today.getDate() - daysSinceMonday);
+startOfWeek.setHours(0, 0, 0, 0);
+
+const weekSeconds = sessions
+  .filter((session) => {
+    const sessionDate = new Date(session.date);
+
+    return sessionDate >= startOfWeek && sessionDate <= today;
+  })
+  .reduce((total, session) => total + session.duration, 0);
+  const daysElapsedThisWeek = daysSinceMonday + 1;
+
+const dailyAverageSeconds =
+  daysElapsedThisWeek > 0
+    ? Math.floor(weekSeconds / daysElapsedThisWeek)
+    : 0;
+    const weekData = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
+  (dayLabel, index) => {
+    const date = new Date(startOfWeek);
+    date.setDate(startOfWeek.getDate() + index);
+
+    const totalSeconds = sessions
+      .filter((session) => {
+        const sessionDate = new Date(session.date);
+
+        return (
+          sessionDate.getFullYear() === date.getFullYear() &&
+          sessionDate.getMonth() === date.getMonth() &&
+          sessionDate.getDate() === date.getDate()
+        );
+      })
+      .reduce((total, session) => total + session.duration, 0);
+
+    return {
+      day: dayLabel,
+      seconds: totalSeconds,
+    };
+  }
+);
+
+const maxDaySeconds = Math.max(
+  ...weekData.map((day) => day.seconds),
+  1
+);
+
+const formatDuration = (totalSeconds: number) => {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m`;
+  }
+
+  return `${totalSeconds}s`;
+};
 const stats = [
   {
     label: "Today",
-    value: "2h 35m",
+    value: formatDuration(todaySeconds),
   },
   {
     label: "This week",
-    value: "14h 20m",
+    value: formatDuration(weekSeconds),
   },
   {
     label: "Daily average",
-    value: "2h 03m",
+    value: formatDuration(dailyAverageSeconds),
   },
 ];
-
-const sessions = [
-  {
-    subject: "Mathematics",
-    duration: "1h 20m",
-    date: "Today",
-  },
-  {
-    subject: "German",
-    duration: "45m",
-    date: "Today",
-  },
-  {
-    subject: "Programming",
-    duration: "2h 10m",
-    date: "Yesterday",
-  },
-];
-
-export default function Dashboard() {
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-10">
       <section className="flex items-center justify-between">
@@ -70,15 +153,10 @@ export default function Dashboard() {
 
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-6">
           <div className="flex h-56 items-end justify-between gap-4">
-            {[
-              ["Mon", 45],
-              ["Tue", 70],
-              ["Wed", 35],
-              ["Thu", 90],
-              ["Fri", 55],
-              ["Sat", 75],
-              ["Sun", 50],
-            ].map(([day, height]) => (
+           {weekData.map(({ day, seconds }) => {
+  const height = (seconds / maxDaySeconds) * 100;
+
+  return (
               <div
                 key={day}
                 className="flex h-full flex-1 flex-col items-center justify-end gap-3"
@@ -90,7 +168,8 @@ export default function Dashboard() {
 
                 <span className="text-sm text-white/50">{day}</span>
               </div>
-            ))}
+           );
+})}
           </div>
         </div>
       </section>

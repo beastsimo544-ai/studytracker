@@ -11,6 +11,21 @@ export default function TimerPage() {
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState("Mathematics");
+ const [subjects, setSubjects] = useState<string[]>([]);
+
+ useEffect(() => {
+  const savedSubjects = JSON.parse(
+    localStorage.getItem("studySubjects") || "[]"
+  );
+
+  setTimeout(() => {
+    setSubjects(savedSubjects);
+
+    if (savedSubjects.length > 0) {
+      setSelectedSubject(savedSubjects[0]);
+    }
+  }, 0);
+}, []);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -91,15 +106,21 @@ export default function TimerPage() {
           Subject
         </label>
 
-        <select
+       <select
   value={selectedSubject}
   onChange={(e) => setSelectedSubject(e.target.value)}
   className="mt-2 w-full rounded-xl border border-white/10 bg-black p-3"
 >
-          <option>Mathematics</option>
-          <option>Programming</option>
-          <option>German</option>
-        </select>
+  {subjects.length === 0 ? (
+    <option value="">No subjects yet</option>
+  ) : (
+    subjects.map((subject) => (
+      <option key={subject} value={subject}>
+        {subject}
+      </option>
+    ))
+  )}
+</select>
 
         <div className="py-16 text-center">
           <p className="font-mono text-6xl font-bold tracking-wider">
