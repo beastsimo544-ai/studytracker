@@ -1,5 +1,5 @@
 "use client";
-
+import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
 type StudySession = {
   id: string;
@@ -45,9 +45,34 @@ export default function TimerPage() {
       .map((value) => value.toString().padStart(2, "0"))
       .join(":");
   };
-  const finishSession = () => {
+ const finishSession = async () => {
   if (seconds === 0) return;
 
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    alert("You must be logged in to save a session.");
+    return;
+  }
+
+  const { error } = await supabase
+    .from("study_sessions")
+    .insert({
+      subject: selectedSubject,
+      duration: seconds,
+      user_id: user.id,
+    });
+
+  if (error) {
+    console.error(error);
+    alert("Could not save session to database.");
+    return;
+  }
+
+  // Keep localStorage working for now
   const newSession: StudySession = {
     id: crypto.randomUUID(),
     subject: selectedSubject,

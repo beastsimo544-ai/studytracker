@@ -178,17 +178,26 @@ const stats = [
         <h2 className="text-xl font-semibold">Recent sessions</h2>
 
         <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
-          {sessions.map((session) => (
+         {sessions
+  .slice()
+  .sort(
+    (a, b) =>
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+  )
+  .slice(0, 5)
+  .map((session) => (
             <div
-              key={`${session.subject}-${session.date}`}
+             key={session.id}
               className="flex items-center justify-between border-b border-white/10 bg-white/5 px-6 py-4 last:border-b-0"
             >
               <div>
                 <p className="font-medium">{session.subject}</p>
-                <p className="mt-1 text-sm text-white/50">{session.date}</p>
+                <p className="mt-1 text-sm text-white/50">{new Date(session.date).toLocaleString()}</p>
               </div>
 
-              <p className="font-semibold">{session.duration}</p>
+              <p className="font-semibold">
+  {formatDuration(session.duration)}
+</p>
             </div>
           ))}
         </div>
