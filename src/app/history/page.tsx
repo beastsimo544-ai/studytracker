@@ -1,24 +1,44 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 type StudySession = {
-  id: string;
+  id: number;
   subject: string;
   duration: number;
-  date: string;
+  created_at: string;
 };
 
 export default function HistoryPage() {
   const [sessions, setSessions] = useState<StudySession[]>([]);
 
-  useEffect(() => {
-    const savedSessions = JSON.parse(
-      localStorage.getItem("studySessions") || "[]"
-    );
+ useEffect(() => {
+  const fetchSessions = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    setSessions(savedSessions);
-  }, []);
+    if (!user) {
+      setSessions([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("study_sessions")
+      .select("id, subject, duration, created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setSessions(data || []);
+  };
+
+  fetchSessions();
+}, []);
 
   const formatDuration = (totalSeconds: number) => {
     const hours = Math.floor(totalSeconds / 3600);
@@ -64,7 +84,7 @@ export default function HistoryPage() {
                   </p>
 
                   <p className="mt-1 text-sm text-white/50">
-                    {formatDate(session.date)}
+                  {formatDate(session.created_at)}
                   </p>
                 </div>
 

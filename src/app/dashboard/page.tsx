@@ -4,31 +4,49 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 type StudySession = {
-  id: string;
+  id: number;
   subject: string;
   duration: number;
-  date: string;
+  created_at: string;
 };
 
 export default function Dashboard() {
   const [sessions, setSessions] = useState<StudySession[]>([]);
 
  useEffect(() => {
-  const savedSessions = JSON.parse(
-    localStorage.getItem("studySessions") || "[]"
-  );
+  const fetchSessions = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  setTimeout(() => {
-    setSessions(savedSessions);
-  }, 0);
+    if (!user) {
+      setSessions([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("study_sessions")
+      .select("id, subject, duration, created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setSessions(data || []);
+  };
+
+  fetchSessions();
 }, []);
    const today = new Date();
 
 const todaySeconds = sessions
   .filter((session) => {
-    const sessionDate = new Date(session.date);
+    const sessionDate = new Date(session.created_at);
 
     return (
       sessionDate.getFullYear() === today.getFullYear() &&
@@ -45,12 +63,14 @@ const daysSinceMonday = day === 0 ? 6 : day - 1;
 
 startOfWeek.setDate(today.getDate() - daysSinceMonday);
 startOfWeek.setHours(0, 0, 0, 0);
+const endOfToday = new Date(today);
+endOfToday.setHours(23, 59, 59, 999);
 
 const weekSeconds = sessions
   .filter((session) => {
-    const sessionDate = new Date(session.date);
+    const sessionDate = new Date(session.created_at);
 
-    return sessionDate >= startOfWeek && sessionDate <= today;
+    return sessionDate >= startOfWeek && sessionDate <= endOfToday;
   })
   .reduce((total, session) => total + session.duration, 0);
   const daysElapsedThisWeek = daysSinceMonday + 1;
@@ -66,7 +86,7 @@ const dailyAverageSeconds =
 
     const totalSeconds = sessions
       .filter((session) => {
-        const sessionDate = new Date(session.date);
+        const sessionDate = new Date(session.created_at);
 
         return (
           sessionDate.getFullYear() === date.getFullYear() &&
@@ -182,7 +202,8 @@ const stats = [
   .slice()
   .sort(
     (a, b) =>
-      new Date(b.date).getTime() - new Date(a.date).getTime()
+      new Date(b.created_at).getTime() -
+new Date(a.created_at).getTime()
   )
   .slice(0, 5)
   .map((session) => (
@@ -192,7 +213,7 @@ const stats = [
             >
               <div>
                 <p className="font-medium">{session.subject}</p>
-                <p className="mt-1 text-sm text-white/50">{new Date(session.date).toLocaleString()}</p>
+                <p className="mt-1 text-sm text-white/50">{new Date(session.created_at).toLocaleString()}</p>
               </div>
 
               <p className="font-semibold">
