@@ -13,18 +13,40 @@ export default function TimerPage() {
   const [selectedSubject, setSelectedSubject] = useState("Mathematics");
  const [subjects, setSubjects] = useState<string[]>([]);
 
- useEffect(() => {
-  const savedSubjects = JSON.parse(
-    localStorage.getItem("studySubjects") || "[]"
-  );
+useEffect(() => {
+  const fetchSubjects = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  setTimeout(() => {
-    setSubjects(savedSubjects);
-
-    if (savedSubjects.length > 0) {
-      setSelectedSubject(savedSubjects[0]);
+    if (!user) {
+      setSubjects([]);
+      setSelectedSubject("");
+      return;
     }
-  }, 0);
+
+    const { data, error } = await supabase
+      .from("subjects")
+      .select("name")
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    const subjectNames = data.map((subject) => subject.name);
+
+    setSubjects(subjectNames);
+
+    if (subjectNames.length > 0) {
+      setSelectedSubject(subjectNames[0]);
+    } else {
+      setSelectedSubject("");
+    }
+  };
+
+  fetchSubjects();
 }, []);
 
   useEffect(() => {
@@ -72,24 +94,38 @@ export default function TimerPage() {
     return;
   }
 
-  // Keep localStorage working for now
-  const newSession: StudySession = {
-    id: crypto.randomUUID(),
-    subject: selectedSubject,
-    duration: seconds,
-    date: new Date().toISOString(),
-  };
+ const finishSession = async () => {
+  if (seconds === 0) return;
 
-  const existingSessions = JSON.parse(
-    localStorage.getItem("studySessions") || "[]"
-  );
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-  const updatedSessions = [newSession, ...existingSessions];
+  if (userError || !user) {
+    alert("You must be logged in to save a session.");
+    return;
+  }
 
-  localStorage.setItem(
-    "studySessions",
-    JSON.stringify(updatedSessions)
-  );
+  const { error } = await supabase
+    .from("study_sessions")
+    .insert({
+      subject: selectedSubject,
+      duration: seconds,
+      user_id: user.id,
+    });
+
+  if (error) {
+    console.error(error);
+    alert("Could not save session to database.");
+    return;
+  }
+
+  setIsRunning(false);
+  setSeconds(0);
+
+  alert("Study session saved!");
+};
 
   setIsRunning(false);
   setSeconds(0);
