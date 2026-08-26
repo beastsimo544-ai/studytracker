@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -12,6 +13,8 @@ export default function SubjectPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [newSubject, setNewSubject] = useState("");
 
+  const router = useRouter();
+
   useEffect(() => {
     const fetchSubjects = async () => {
       const {
@@ -19,9 +22,9 @@ export default function SubjectPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setSubjects([]);
-        return;
-      }
+  router.push("/login");
+  return;
+}
 
       const { data, error } = await supabase
         .from("subjects")
@@ -59,7 +62,7 @@ export default function SubjectPage() {
     };
 
     fetchSubjects();
-  }, []);
+  }, [router]);
 
   const addSubject = async () => {
     const trimmedSubject = newSubject.trim();

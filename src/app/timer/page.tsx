@@ -1,12 +1,7 @@
 "use client";
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
-type StudySession = {
-  id: string;
-  subject: string;
-  duration: number;
-  date: string;
-};
+
 export default function TimerPage() {
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -20,11 +15,12 @@ useEffect(() => {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      setSubjects([]);
-      setSelectedSubject("");
-      return;
-    }
+  const publicSubjects = ["Study", "Deep Work", "Reading", "Other"];
 
+  setSubjects(publicSubjects);
+  setSelectedSubject(publicSubjects[0]);
+  return;
+}
     const { data, error } = await supabase
       .from("subjects")
       .select("name")
@@ -93,45 +89,13 @@ useEffect(() => {
     alert("Could not save session to database.");
     return;
   }
-
- const finishSession = async () => {
-  if (seconds === 0) return;
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    alert("You must be logged in to save a session.");
-    return;
-  }
-
-  const { error } = await supabase
-    .from("study_sessions")
-    .insert({
-      subject: selectedSubject,
-      duration: seconds,
-      user_id: user.id,
-    });
-
-  if (error) {
-    console.error(error);
-    alert("Could not save session to database.");
-    return;
-  }
-
   setIsRunning(false);
   setSeconds(0);
 
   alert("Study session saved!");
 };
 
-  setIsRunning(false);
-  setSeconds(0);
 
-  alert("Study session saved!");
-};
   useEffect(() => {
   if (isRunning) {
     document.title = `${formatTime(seconds)} - ${selectedSubject}`;

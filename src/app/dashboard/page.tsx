@@ -2,6 +2,7 @@
 
 "use client";
 
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -15,6 +16,7 @@ type StudySession = {
 
 export default function Dashboard() {
   const [sessions, setSessions] = useState<StudySession[]>([]);
+  const router = useRouter();
 
  useEffect(() => {
   const fetchSessions = async () => {
@@ -23,9 +25,9 @@ export default function Dashboard() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      setSessions([]);
-      return;
-    }
+  router.push("/login");
+  return;
+}
 
     const { data, error } = await supabase
       .from("study_sessions")
@@ -41,7 +43,7 @@ export default function Dashboard() {
   };
 
   fetchSessions();
-}, []);
+}, [router]);
    const today = new Date();
 
 const todaySeconds = sessions
@@ -122,6 +124,22 @@ const formatDuration = (totalSeconds: number) => {
 
   return `${totalSeconds}s`;
 };
+const subjectTotals = sessions.reduce<Record<string, number>>(
+  (totals, session) => {
+    totals[session.subject] =
+      (totals[session.subject] || 0) + session.duration;
+
+    return totals;
+  },
+  {}
+);
+
+const subjectData = Object.entries(subjectTotals)
+  .map(([subject, seconds]) => ({
+    subject,
+    seconds,
+  }))
+  .sort((a, b) => b.seconds - a.seconds);
 const stats = [
   {
     label: "Today",
@@ -193,7 +211,30 @@ const stats = [
           </div>
         </div>
       </section>
+<section className="mt-10">
+  <h2 className="text-xl font-semibold">Study by subject</h2>
 
+  <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
+    {subjectData.length === 0 ? (
+      <div className="bg-white/5 px-6 py-6 text-white/50">
+        No study data yet.
+      </div>
+    ) : (
+      subjectData.map(({ subject, seconds }) => (
+        <div
+          key={subject}
+          className="flex items-center justify-between border-b border-white/10 bg-white/5 px-6 py-4 last:border-b-0"
+        >
+          <p className="font-medium">{subject}</p>
+
+          <p className="font-semibold">
+            {formatDuration(seconds)}
+          </p>
+        </div>
+      ))
+    )}
+  </div>
+</section>
       <section className="mt-10">
         <h2 className="text-xl font-semibold">Recent sessions</h2>
 

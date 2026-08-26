@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -12,7 +13,7 @@ type StudySession = {
 
 export default function HistoryPage() {
   const [sessions, setSessions] = useState<StudySession[]>([]);
-
+  const router = useRouter();
  useEffect(() => {
   const fetchSessions = async () => {
     const {
@@ -20,9 +21,9 @@ export default function HistoryPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      setSessions([]);
-      return;
-    }
+  router.push("/login");
+  return;
+}
 
     const { data, error } = await supabase
       .from("study_sessions")
@@ -38,7 +39,7 @@ export default function HistoryPage() {
   };
 
   fetchSessions();
-}, []);
+}, [router]);
 
   const formatDuration = (totalSeconds: number) => {
     const hours = Math.floor(totalSeconds / 3600);
