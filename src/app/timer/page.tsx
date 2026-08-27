@@ -1,8 +1,10 @@
 "use client";
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function TimerPage() {
+  const router = useRouter();
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState("Mathematics");
@@ -72,10 +74,13 @@ useEffect(() => {
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
-    alert("You must be logged in to save a session.");
-    return;
-  }
+  alert(
+    "Session finished! Log in or create an account to save your study progress."
+  );
 
+ router.push("/login");
+  return;
+}
   const { error } = await supabase
     .from("study_sessions")
     .insert({

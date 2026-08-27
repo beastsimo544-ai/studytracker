@@ -42,12 +42,19 @@ export default function Navbar() {
         </Link>
 
         <div className="flex gap-6">
-          <Link href="/dashboard">Dashboard</Link>
-          <Link href="/timer">Timer</Link>
-          <Link href="/subject">Subjects</Link>
-          <Link href="/history">History</Link>
-        </div>
+  {isLoggedIn && (
+    <Link href="/dashboard">Dashboard</Link>
+  )}
 
+  <Link href="/timer">Timer</Link>
+
+  {isLoggedIn && (
+    <>
+      <Link href="/subject">Subjects</Link>
+      <Link href="/history">History</Link>
+    </>
+  )}
+</div>
         <div className="flex gap-3">
           {isLoggedIn ? (
             <button

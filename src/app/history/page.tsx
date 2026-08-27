@@ -13,33 +13,37 @@ type StudySession = {
 
 export default function HistoryPage() {
   const [sessions, setSessions] = useState<StudySession[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState("All");
+  const [selectedPeriod, setSelectedPeriod] = useState("All");
+
   const router = useRouter();
- useEffect(() => {
-  const fetchSessions = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
 
-    if (!user) {
-  router.push("/login");
-  return;
-}
+  useEffect(() => {
+    const fetchSessions = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    const { data, error } = await supabase
-      .from("study_sessions")
-      .select("id, subject, duration, created_at")
-      .order("created_at", { ascending: false });
+      if (!user) {
+        router.push("/login");
+        return;
+      }
 
-    if (error) {
-      console.error(error);
-      return;
-    }
+      const { data, error } = await supabase
+        .from("study_sessions")
+        .select("id, subject, duration, created_at")
+        .order("created_at", { ascending: false });
 
-    setSessions(data || []);
-  };
+      if (error) {
+        console.error(error);
+        return;
+      }
 
-  fetchSessions();
-}, [router]);
+      setSessions(data || []);
+    };
+
+    fetchSessions();
+  }, [router]);
 
   const formatDuration = (totalSeconds: number) => {
     const hours = Math.floor(totalSeconds / 3600);
@@ -55,6 +59,64 @@ export default function HistoryPage() {
     return new Date(date).toLocaleString();
   };
 
+  // Get unique subjects from study history
+  const subjects = Array.from(
+    new Set(sessions.map((session) => session.subject))
+  );
+
+  const today = new Date();
+
+  const filteredSessions = sessions.filter((session) => {
+    // SUBJECT FILTER
+    const matchesSubject =
+      selectedSubject === "All" ||
+      session.subject === selectedSubject;
+
+    if (!matchesSubject) {
+      return false;
+    }
+
+    // DATE FILTER
+    if (selectedPeriod === "All") {
+      return true;
+    }
+
+    const sessionDate = new Date(session.created_at);
+
+    if (selectedPeriod === "Today") {
+      return (
+        sessionDate.getFullYear() === today.getFullYear() &&
+        sessionDate.getMonth() === today.getMonth() &&
+        sessionDate.getDate() === today.getDate()
+      );
+    }
+
+    if (selectedPeriod === "Week") {
+      const startOfWeek = new Date(today);
+
+      const day = today.getDay();
+      const daysSinceMonday = day === 0 ? 6 : day - 1;
+
+      startOfWeek.setDate(today.getDate() - daysSinceMonday);
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      return sessionDate >= startOfWeek;
+    }
+
+    if (selectedPeriod === "Month") {
+      return (
+        sessionDate.getFullYear() === today.getFullYear() &&
+        sessionDate.getMonth() === today.getMonth()
+      );
+    }
+
+    return true;
+  });
+  const filteredTotalSeconds = filteredSessions.reduce(
+  (total, session) => total + session.duration,
+  0
+);
+
   return (
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
       <div>
@@ -65,16 +127,54 @@ export default function HistoryPage() {
         </p>
       </div>
 
-      <div className="mt-10">
-        {sessions.length === 0 ? (
+      {/* FILTERS */}
+      <div className="mt-8 flex flex-wrap gap-4">
+        <select
+          value={selectedSubject}
+          onChange={(e) => setSelectedSubject(e.target.value)}
+          className="rounded-xl border border-white/10 bg-black px-4 py-3"
+        >
+          <option value="All">All subjects</option>
+
+          {subjects.map((subject) => (
+            <option key={subject} value={subject}>
+              {subject}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={selectedPeriod}
+          onChange={(e) => setSelectedPeriod(e.target.value)}
+          className="rounded-xl border border-white/10 bg-black px-4 py-3"
+        >
+          <option value="All">All time</option>
+          <option value="Today">Today</option>
+          <option value="Week">This week</option>
+          <option value="Month">This month</option>
+        </select>
+      </div>
+      <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5">
+  <p className="text-sm text-white/50">
+    Total study time
+  </p>
+
+  <p className="mt-2 font-mono text-2xl font-bold">
+    {formatDuration(filteredTotalSeconds)}
+  </p>
+</div>
+
+      {/* HISTORY */}
+      <div className="mt-6">
+        {filteredSessions.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
             <p className="text-white/60">
-              You haven&apos;t completed any study sessions yet.
+              No study sessions match these filters.
             </p>
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-white/10">
-            {sessions.map((session) => (
+            {filteredSessions.map((session) => (
               <div
                 key={session.id}
                 className="flex items-center justify-between border-b border-white/10 bg-white/5 px-6 py-5 last:border-b-0"
@@ -85,7 +185,7 @@ export default function HistoryPage() {
                   </p>
 
                   <p className="mt-1 text-sm text-white/50">
-                  {formatDate(session.created_at)}
+                    {formatDate(session.created_at)}
                   </p>
                 </div>
 
