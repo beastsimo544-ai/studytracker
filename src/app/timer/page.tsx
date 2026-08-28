@@ -1,52 +1,138 @@
 "use client";
+
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function TimerPage() {
   const router = useRouter();
+
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState("Mathematics");
- const [subjects, setSubjects] = useState<string[]>([]);
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [hasHydrated, setHasHydrated] = useState(false);
 
-useEffect(() => {
-  const fetchSubjects = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  // Restore an unfinished timer after refresh
+  useEffect(() => {
+    const savedTimer = localStorage.getItem("studyTimer");
 
-    if (!user) {
-  const publicSubjects = ["Study", "Deep Work", "Reading", "Other"];
+    if (savedTimer) {
+      try {
+        const parsedTimer = JSON.parse(savedTimer);
 
-  setSubjects(publicSubjects);
-  setSelectedSubject(publicSubjects[0]);
-  return;
-}
-    const { data, error } = await supabase
-      .from("subjects")
-      .select("name")
-      .order("created_at", { ascending: true });
+        setSeconds(parsedTimer.seconds ?? 0);
+        setIsRunning(parsedTimer.isRunning ?? false);
 
-    if (error) {
-      console.error(error);
+        if (parsedTimer.selectedSubject) {
+          setSelectedSubject(parsedTimer.selectedSubject);
+        }
+      } catch (error) {
+        console.error("Could not restore timer:", error);
+        localStorage.removeItem("studyTimer");
+      }
+    }
+
+    setHasHydrated(true);
+  }, []);
+
+  // Load subjects
+  useEffect(() => {
+    const fetchSubjects = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      let savedSubject = "";
+
+      const savedTimer = localStorage.getItem("studyTimer");
+
+      if (savedTimer) {
+        try {
+          savedSubject = JSON.parse(savedTimer).selectedSubject ?? "";
+        } catch {
+          savedSubject = "";
+        }
+      }
+
+      if (!user) {
+        const publicSubjects = [
+          "Study",
+          "Deep Work",
+          "Reading",
+          "Other",
+        ];
+
+        setSubjects(publicSubjects);
+
+        if (
+          savedSubject &&
+          publicSubjects.includes(savedSubject)
+        ) {
+          setSelectedSubject(savedSubject);
+        } else {
+          setSelectedSubject(publicSubjects[0]);
+        }
+
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("subjects")
+        .select("name")
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      const subjectNames = data.map(
+        (subject) => subject.name
+      );
+
+      setSubjects(subjectNames);
+
+      if (
+        savedSubject &&
+        subjectNames.includes(savedSubject)
+      ) {
+        setSelectedSubject(savedSubject);
+      } else if (subjectNames.length > 0) {
+        setSelectedSubject(subjectNames[0]);
+      } else {
+        setSelectedSubject("");
+      }
+    };
+
+    fetchSubjects();
+  }, []);
+
+  // Save active/paused timer state
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    if (seconds === 0 && !isRunning) {
+      localStorage.removeItem("studyTimer");
       return;
     }
 
-    const subjectNames = data.map((subject) => subject.name);
+    localStorage.setItem(
+      "studyTimer",
+      JSON.stringify({
+        seconds,
+        isRunning,
+        selectedSubject,
+      })
+    );
+  }, [
+    seconds,
+    isRunning,
+    selectedSubject,
+    hasHydrated,
+  ]);
 
-    setSubjects(subjectNames);
-
-    if (subjectNames.length > 0) {
-      setSelectedSubject(subjectNames[0]);
-    } else {
-      setSelectedSubject("");
-    }
-  };
-
-  fetchSubjects();
-}, []);
-
+  // Timer
   useEffect(() => {
     if (!isRunning) return;
 
@@ -56,76 +142,91 @@ useEffect(() => {
 
     return () => clearInterval(interval);
   }, [isRunning]);
-   const formatTime = (totalSeconds: number) => {
+
+  const formatTime = (totalSeconds: number) => {
     const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const minutes = Math.floor(
+      (totalSeconds % 3600) / 60
+    );
     const secs = totalSeconds % 60;
 
     return [hours, minutes, secs]
-      .map((value) => value.toString().padStart(2, "0"))
+      .map((value) =>
+        value.toString().padStart(2, "0")
+      )
       .join(":");
   };
- const finishSession = async () => {
-  if (seconds === 0) return;
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  const finishSession = async () => {
+    if (seconds === 0) return;
 
-  if (userError || !user) {
-  alert(
-    "Session finished! Log in or create an account to save your study progress."
-  );
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
- router.push("/login");
-  return;
-}
-  const { error } = await supabase
-    .from("study_sessions")
-    .insert({
-      subject: selectedSubject,
-      duration: seconds,
-      user_id: user.id,
-    });
+    if (userError || !user) {
+      alert(
+        "Session finished! Log in or create an account to save your study progress."
+      );
 
-  if (error) {
-    console.error(error);
-    alert("Could not save session to database.");
-    return;
-  }
-  setIsRunning(false);
-  setSeconds(0);
+      router.push("/login");
+      return;
+    }
 
-  alert("Study session saved!");
-};
+    const { error } = await supabase
+      .from("study_sessions")
+      .insert({
+        subject: selectedSubject,
+        duration: seconds,
+        user_id: user.id,
+      });
 
+    if (error) {
+      console.error(error);
+      alert("Could not save session to database.");
+      return;
+    }
 
-  useEffect(() => {
-  if (isRunning) {
-    document.title = `${formatTime(seconds)} - ${selectedSubject}`;
-  } else if (seconds > 0) {
-    document.title = `${formatTime(seconds)} - Paused`;
-  } else {
-    document.title = "StudyTracker";
-  }
+    setIsRunning(false);
+    setSeconds(0);
+    localStorage.removeItem("studyTimer");
 
-  return () => {
-    document.title = "StudyTracker";
+    alert("Study session saved!");
   };
-}, [seconds, isRunning, selectedSubject]);
 
- 
+  // Browser tab title
+  useEffect(() => {
+    if (isRunning) {
+      document.title = `${formatTime(
+        seconds
+      )} - ${selectedSubject}`;
+    } else if (seconds > 0) {
+      document.title = `${formatTime(
+        seconds
+      )} - Paused`;
+    } else {
+      document.title = "StudyTracker";
+    }
+
+    return () => {
+      document.title = "StudyTracker";
+    };
+  }, [seconds, isRunning, selectedSubject]);
 
   const resetTimer = () => {
     setIsRunning(false);
     setSeconds(0);
+    localStorage.removeItem("studyTimer");
   };
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-10">
       <div>
-        <h1 className="text-3xl font-bold">Study Timer</h1>
+        <h1 className="text-3xl font-bold">
+          Study Timer
+        </h1>
+
         <p className="mt-2 text-white/60">
           Choose a subject and start studying.
         </p>
@@ -136,21 +237,28 @@ useEffect(() => {
           Subject
         </label>
 
-       <select
-  value={selectedSubject}
-  onChange={(e) => setSelectedSubject(e.target.value)}
-  className="mt-2 w-full rounded-xl border border-white/10 bg-black p-3"
->
-  {subjects.length === 0 ? (
-    <option value="">No subjects yet</option>
-  ) : (
-    subjects.map((subject) => (
-      <option key={subject} value={subject}>
-        {subject}
-      </option>
-    ))
-  )}
-</select>
+        <select
+          value={selectedSubject}
+          onChange={(e) =>
+            setSelectedSubject(e.target.value)
+          }
+          className="mt-2 w-full rounded-xl border border-white/10 bg-black p-3"
+        >
+          {subjects.length === 0 ? (
+            <option value="">
+              No subjects yet
+            </option>
+          ) : (
+            subjects.map((subject) => (
+              <option
+                key={subject}
+                value={subject}
+              >
+                {subject}
+              </option>
+            ))
+          )}
+        </select>
 
         <div className="py-16 text-center">
           <p className="font-mono text-6xl font-bold tracking-wider">
@@ -159,37 +267,37 @@ useEffect(() => {
         </div>
 
         <div className="flex justify-center gap-4">
-  {!isRunning ? (
-    <button
-      onClick={() => setIsRunning(true)}
-      className="rounded-xl bg-white px-8 py-3 font-semibold text-black"
-    >
-      Start
-    </button>
-  ) : (
-    <button
-      onClick={() => setIsRunning(false)}
-      className="rounded-xl bg-white px-8 py-3 font-semibold text-black"
-    >
-      Pause
-    </button>
-  )}
+          {!isRunning ? (
+            <button
+              onClick={() => setIsRunning(true)}
+              className="rounded-xl bg-white px-8 py-3 font-semibold text-black"
+            >
+              {seconds > 0 ? "Resume" : "Start"}
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsRunning(false)}
+              className="rounded-xl bg-white px-8 py-3 font-semibold text-black"
+            >
+              Pause
+            </button>
+          )}
 
-  <button
-    onClick={resetTimer}
-    className="rounded-xl border border-white/20 px-8 py-3 font-semibold"
-  >
-    Reset
-  </button>
+          <button
+            onClick={resetTimer}
+            className="rounded-xl border border-white/20 px-8 py-3 font-semibold"
+          >
+            Reset
+          </button>
 
-  <button
-    onClick={finishSession}
-    disabled={seconds === 0}
-    className="rounded-xl border border-white/20 px-8 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-30"
-  >
-    Finish Session
-  </button>
-</div>
+          <button
+            onClick={finishSession}
+            disabled={seconds === 0}
+            className="rounded-xl border border-white/20 px-8 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            Finish Session
+          </button>
+        </div>
       </div>
     </main>
   );

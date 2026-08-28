@@ -13,6 +13,8 @@ type StudySession = {
 
 export default function HistoryPage() {
   const [sessions, setSessions] = useState<StudySession[]>([]);
+  const [editingSessionId, setEditingSessionId] = useState<number | null>(null);
+const [editSubject, setEditSubject] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("All");
   const [selectedPeriod, setSelectedPeriod] = useState("All");
 
@@ -58,7 +60,67 @@ export default function HistoryPage() {
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString();
   };
+  const deleteSession = async (id: number) => {
+  const confirmed = window.confirm(
+    "Are you sure you want to delete this study session?"
+  );
 
+
+  if (!confirmed) return;
+
+  const { error } = await supabase
+    .from("study_sessions")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("Delete error:", error);
+    alert("Could not delete the session.");
+    return;
+  }
+
+  setSessions((currentSessions) =>
+    currentSessions.filter((session) => session.id !== id)
+  );
+};
+const saveEdit = async (id: number) => {
+  const cleanedSubject = editSubject.trim();
+
+  if (!cleanedSubject) {
+    alert("Subject cannot be empty.");
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("study_sessions")
+    .update({
+      subject: cleanedSubject,
+    })
+    .eq("id", id)
+    .select();
+
+  if (error) {
+    console.error("Edit error:", error);
+    alert(`Could not update session: ${error.message}`);
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    alert("The database did not update the session. Check the UPDATE RLS policy.");
+    return;
+  }
+
+  setSessions((currentSessions) =>
+    currentSessions.map((session) =>
+      session.id === id
+        ? { ...session, subject: cleanedSubject }
+        : session
+    )
+  );
+
+  setEditingSessionId(null);
+  setEditSubject("");
+};
   // Get unique subjects from study history
   const subjects = Array.from(
     new Set(sessions.map((session) => session.subject))
@@ -180,18 +242,69 @@ export default function HistoryPage() {
                 className="flex items-center justify-between border-b border-white/10 bg-white/5 px-6 py-5 last:border-b-0"
               >
                 <div>
-                  <p className="text-lg font-semibold">
-                    {session.subject}
-                  </p>
+                 {editingSessionId === session.id ? (
+  <input
+    type="text"
+    value={editSubject}
+    onChange={(e) => setEditSubject(e.target.value)}
+    className="rounded-lg border border-white/10 bg-black px-3 py-2 text-white"
+  />
+) : (
+  <p className="text-lg font-semibold">
+    {session.subject}
+  </p>
+)}
 
                   <p className="mt-1 text-sm text-white/50">
                     {formatDate(session.created_at)}
                   </p>
                 </div>
 
-                <p className="font-mono text-lg font-semibold">
-                  {formatDuration(session.duration)}
-                </p>
+<div className="flex items-center gap-3">
+  <p className="font-mono text-lg font-semibold">
+    {formatDuration(session.duration)}
+  </p>
+
+  {editingSessionId === session.id ? (
+    <>
+      <button
+        onClick={() => saveEdit(session.id)}
+        className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-sm text-green-400 transition hover:bg-green-500/20"
+      >
+        Save
+      </button>
+
+      <button
+        onClick={() => {
+          setEditingSessionId(null);
+          setEditSubject("");
+        }}
+        className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70 transition hover:bg-white/10"
+      >
+        Cancel
+      </button>
+    </>
+  ) : (
+    <>
+      <button
+        onClick={() => {
+          setEditingSessionId(session.id);
+          setEditSubject(session.subject);
+        }}
+        className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-sm text-blue-400 transition hover:bg-blue-500/20"
+      >
+        Edit
+      </button>
+
+      <button
+        onClick={() => deleteSession(session.id)}
+        className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400 transition hover:bg-red-500/20"
+      >
+        Delete
+      </button>
+    </>
+  )}
+</div>
               </div>
             ))}
           </div>
