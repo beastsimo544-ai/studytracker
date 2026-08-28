@@ -87,16 +87,20 @@ const saveDailyGoal = async (newGoalMinutes: number) => {
 
   if (!user) return;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("profiles")
     .update({
       daily_goal_minutes: newGoalMinutes,
     })
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .select();
 
   if (error) {
-    console.error("Error saving daily goal:", error);
+    alert(`Goal save error: ${error.message}`);
+    return;
   }
+
+  console.log("Saved profile:", data);
 };
 
 const today = new Date();
@@ -444,11 +448,7 @@ saveDailyGoal(newGoal);
 
             const newGoal = hours * 60 + minutes;
 
-            setDailyGoalMinutes(newGoal);
-            localStorage.setItem(
-              "dailyStudyGoal",
-              String(newGoal)
-            );
+            saveDailyGoal(newGoal);
           }}
           className="w-24 rounded-xl border border-white/10 bg-black px-4 py-3"
         />
