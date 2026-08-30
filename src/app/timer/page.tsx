@@ -142,6 +142,21 @@ export default function TimerPage() {
 
     return () => clearInterval(interval);
   }, [isRunning]);
+  // Warn user before leaving with an active session
+useEffect(() => {
+  const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+    if (seconds > 0) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  };
+
+  window.addEventListener("beforeunload", handleBeforeUnload);
+
+  return () => {
+    window.removeEventListener("beforeunload", handleBeforeUnload);
+  };
+}, [seconds]);
 
   const formatTime = (totalSeconds: number) => {
     const hours = Math.floor(totalSeconds / 3600);
@@ -237,13 +252,14 @@ export default function TimerPage() {
           Subject
         </label>
 
-        <select
-          value={selectedSubject}
-          onChange={(e) =>
-            setSelectedSubject(e.target.value)
-          }
-          className="mt-2 w-full rounded-xl border border-white/10 bg-black p-3"
-        >
+       <select
+  value={selectedSubject}
+  onChange={(e) =>
+    setSelectedSubject(e.target.value)
+  }
+  disabled={seconds > 0}
+  className="mt-2 w-full rounded-xl border border-white/10 bg-black p-3 disabled:cursor-not-allowed disabled:opacity-50"
+>
           {subjects.length === 0 ? (
             <option value="">
               No subjects yet

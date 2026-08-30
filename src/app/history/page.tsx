@@ -13,7 +13,8 @@ type StudySession = {
 
 export default function HistoryPage() {
   const [sessions, setSessions] = useState<StudySession[]>([]);
-  const [editingSessionId, setEditingSessionId] = useState<number | null>(null);
+const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+const [editingSessionId, setEditingSessionId] = useState<number | null>(null);
 const [editSubject, setEditSubject] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("All");
   const [selectedPeriod, setSelectedPeriod] = useState("All");
@@ -30,6 +31,18 @@ const [editSubject, setEditSubject] = useState("");
         router.push("/login");
         return;
       }
+      const { data: subjectData, error: subjectError } = await supabase
+  .from("subjects")
+  .select("name")
+  .order("created_at", { ascending: true });
+
+if (subjectError) {
+  console.error("Could not load subjects:", subjectError);
+} else {
+  setAvailableSubjects(
+    (subjectData || []).map((subject) => subject.name)
+  );
+}
 
       const { data, error } = await supabase
         .from("study_sessions")
@@ -242,13 +255,18 @@ const saveEdit = async (id: number) => {
                 className="flex items-center justify-between border-b border-white/10 bg-white/5 px-6 py-5 last:border-b-0"
               >
                 <div>
-                 {editingSessionId === session.id ? (
-  <input
-    type="text"
+                {editingSessionId === session.id ? (
+  <select
     value={editSubject}
     onChange={(e) => setEditSubject(e.target.value)}
     className="rounded-lg border border-white/10 bg-black px-3 py-2 text-white"
-  />
+  >
+    {availableSubjects.map((subject) => (
+      <option key={subject} value={subject}>
+        {subject}
+      </option>
+    ))}
+  </select>
 ) : (
   <p className="text-lg font-semibold">
     {session.subject}
