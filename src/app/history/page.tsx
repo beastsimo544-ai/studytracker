@@ -14,6 +14,7 @@ type StudySession = {
 export default function HistoryPage() {
   const [sessions, setSessions] = useState<StudySession[]>([]);
 const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+const [isLoading, setIsLoading] = useState(true);
 const [editingSessionId, setEditingSessionId] = useState<number | null>(null);
 const [editSubject, setEditSubject] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("All");
@@ -50,11 +51,13 @@ if (subjectError) {
         .order("created_at", { ascending: false });
 
       if (error) {
-        console.error(error);
-        return;
-      }
+      console.error(error);
+      setIsLoading(false);
+      return;
+}
 
       setSessions(data || []);
+      setIsLoading(false);
     };
 
     fetchSessions();
@@ -240,8 +243,15 @@ const saveEdit = async (id: number) => {
 </div>
 
       {/* HISTORY */}
-      <div className="mt-6">
-        {filteredSessions.length === 0 ? (
+      {/* HISTORY */}
+<div className="mt-6">
+  {isLoading ? (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
+      <p className="text-white/60">
+        Loading study history...
+      </p>
+    </div>
+  ) : filteredSessions.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
             <p className="text-white/60">
               No study sessions match these filters.
