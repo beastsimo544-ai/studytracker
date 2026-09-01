@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 
 export default function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isOpen, setIsOpen] = useState(false)
 
   useEffect(() => {
     const checkUser = async () => {
@@ -35,27 +36,28 @@ export default function Navbar() {
   };
 
   return (
-    <header className="border-b border-white/10">
-      <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+  <header className="border-b border-white/10">
+    <nav className="mx-auto max-w-6xl px-6 py-4">
+      <div className="flex items-center justify-between">
         <Link href="/" className="text-xl font-bold">
           StudyTracker
         </Link>
 
-        <div className="flex gap-6">
-  {isLoggedIn && (
-    <Link href="/dashboard">Dashboard</Link>
-  )}
+        {/* Desktop navigation */}
+        <div className="hidden items-center gap-6 md:flex">
+          {isLoggedIn && (
+            <Link href="/dashboard">Dashboard</Link>
+          )}
 
-  <Link href="/timer">Timer</Link>
+          <Link href="/timer">Timer</Link>
 
-  {isLoggedIn && (
-    <>
-      <Link href="/subject">Subjects</Link>
-      <Link href="/history">History</Link>
-    </>
-  )}
-</div>
-        <div className="flex gap-3">
+          {isLoggedIn && (
+            <>
+              <Link href="/subject">Subjects</Link>
+              <Link href="/history">History</Link>
+            </>
+          )}
+
           {isLoggedIn ? (
             <button
               onClick={handleLogout}
@@ -81,7 +83,85 @@ export default function Navbar() {
             </>
           )}
         </div>
-      </nav>
-    </header>
-  );
+
+        {/* Mobile button */}
+        <button
+          onClick={() => setIsOpen((current) => !current)}
+          className="rounded-lg border border-white/20 px-3 py-2 md:hidden"
+        >
+          {isOpen ? "Close" : "Menu"}
+        </button>
+      </div>
+
+      {/* Mobile navigation */}
+      {isOpen && (
+        <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4 md:hidden">
+          {isLoggedIn && (
+            <Link
+              href="/dashboard"
+              onClick={() => setIsOpen(false)}
+            >
+              Dashboard
+            </Link>
+          )}
+
+          <Link
+            href="/timer"
+            onClick={() => setIsOpen(false)}
+          >
+            Timer
+          </Link>
+
+          {isLoggedIn && (
+            <>
+              <Link
+                href="/subject"
+                onClick={() => setIsOpen(false)}
+              >
+                Subjects
+              </Link>
+
+              <Link
+                href="/history"
+                onClick={() => setIsOpen(false)}
+              >
+                History
+              </Link>
+            </>
+          )}
+
+          {isLoggedIn ? (
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                handleLogout();
+              }}
+              className="rounded-lg border border-white/20 px-4 py-2 text-left"
+            >
+              Logout
+            </button>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                onClick={() => setIsOpen(false)}
+                className="rounded-lg border border-white/20 px-4 py-2 text-center"
+              >
+                Login
+              </Link>
+
+              <Link
+                href="/register"
+                onClick={() => setIsOpen(false)}
+                className="rounded-lg bg-white px-4 py-2 text-center text-black"
+              >
+                Sign Up
+              </Link>
+            </>
+          )}
+        </div>
+      )}
+    </nav>
+  </header>
+);
 }

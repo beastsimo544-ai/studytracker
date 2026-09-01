@@ -15,10 +15,12 @@ type StudySession = {
 };
 
 export default function Dashboard() {
-  const [calendarDate, setCalendarDate] = useState(new Date());
-  const [sessions, setSessions] = useState<StudySession[]>([]);
- const [dailyGoalMinutes, setDailyGoalMinutes] = useState(120);
-  const router = useRouter();
+ const [calendarDate, setCalendarDate] = useState(new Date());
+const [sessions, setSessions] = useState<StudySession[]>([]);
+const [dailyGoalMinutes, setDailyGoalMinutes] = useState(120);
+const [isLoading, setIsLoading] = useState(true);
+
+const router = useRouter();
   
 
  useEffect(() => {
@@ -40,27 +42,34 @@ export default function Dashboard() {
       .maybeSingle();
 
     if (profileError) {
-      console.error(profileError);
-      return;
-    }
+    console.error(profileError);
+    setIsLoading(false);
+    return;
+}
 
     if (profile) {
-      setDailyGoalMinutes(profile.daily_goal_minutes);
-    } else {
-      const { error: insertProfileError } = await supabase
-        .from("profiles")
-        .insert({
-          user_id: user.id,
-          daily_goal_minutes: 120,
-        });
-
-      if (insertProfileError) {
-        console.error(insertProfileError);
-        return;
+  setDailyGoalMinutes(profile.daily_goal_minutes);
+} else {
+  const { error: insertProfileError } = await supabase
+    .from("profiles")
+    .upsert(
+      {
+        user_id: user.id,
+        daily_goal_minutes: 120,
+      },
+      {
+        onConflict: "user_id",
       }
+    );
 
-      setDailyGoalMinutes(120);
-    }
+  if (insertProfileError) {
+    console.error("Profile upsert error:", insertProfileError);
+    setIsLoading(false);
+    return;
+  }
+
+  setDailyGoalMinutes(120);
+}
 
     // Load study sessions
     const { data, error } = await supabase
@@ -69,11 +78,13 @@ export default function Dashboard() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error(error);
-      return;
-    }
+  console.error(error);
+  setIsLoading(false);
+  return;
+}
 
     setSessions(data || []);
+    setIsLoading(false);
   };
 
   fetchSessions();
@@ -337,6 +348,17 @@ const stats = [
     value: formatDuration(dailyAverageSeconds),
   },
 ];
+if (isLoading) {
+  return (
+    <main className="mx-auto w-full max-w-6xl px-6 py-10">
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
+        <p className="text-white/60">
+          Loading dashboard...
+        </p>
+      </div>
+    </main>
+  );
+}
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-10">
       <section className="flex items-center justify-between">
@@ -508,12 +530,12 @@ saveDailyGoal(newGoal);
 
   {/* RIGHT — MONTHLY CALENDAR */}
   <div>
-    <div className="flex items-center justify-between">
-      <h2 className="text-xl font-semibold">
-        Study this month
-      </h2>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  <h2 className="text-xl font-semibold">
+    Study this month
+  </h2>
 
-      <div className="flex items-center gap-3">
+  <div className="flex items-center gap-3">
         <button
           onClick={previousMonth}
           className="rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5"

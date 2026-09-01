@@ -282,7 +282,7 @@ useEffect(() => {
           </p>
         </div>
 
-        <div className="flex justify-center gap-4">
+        <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
           {!isRunning ? (
             <button
               onClick={() => setIsRunning(true)}

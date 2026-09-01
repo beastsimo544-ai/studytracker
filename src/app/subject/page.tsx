@@ -13,7 +13,8 @@ export default function SubjectPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [newSubject, setNewSubject] = useState("");
   const [editingSubjectId, setEditingSubjectId] = useState<number | null>(null);
-const [editingName, setEditingName] = useState("");
+  const [editingName, setEditingName] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
   const router = useRouter();
 
@@ -34,33 +35,12 @@ const [editingName, setEditingName] = useState("");
         .order("created_at", { ascending: true });
 
       if (error) {
-        console.error(error);
-        return;
-      }
-
-      if (!data || data.length === 0) {
-        const defaultSubjects = [
-          { name: "Mathematics" },
-          { name: "Programming" },
-          { name: "German" },
-        ];
-
-        const { data: insertedSubjects, error: insertError } =
-          await supabase
-            .from("subjects")
-            .insert(defaultSubjects)
-            .select("id, name");
-
-        if (insertError) {
-          console.error(insertError);
-          return;
-        }
-
-        setSubjects(insertedSubjects || []);
-        return;
-      }
-
+     console.error(error);
+     setIsLoading(false);
+    return;
+}
       setSubjects(data);
+      setIsLoading(false);
     };
 
     fetchSubjects();
@@ -90,8 +70,9 @@ const [editingName, setEditingName] = useState("");
     const { data, error } = await supabase
       .from("subjects")
       .insert({
-        name: trimmedSubject,
-      })
+  name: trimmedSubject,
+  user_id: user.id,
+})
       .select("id, name")
       .single();
 
@@ -198,65 +179,77 @@ const [editingName, setEditingName] = useState("");
       </div>
 
       <div className="mt-8 space-y-3">
-       {subjects.map((subject) => (
-  <div
-    key={subject.id}
-    className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 px-5 py-4"
-  >
-    {editingSubjectId === subject.id ? (
-      <input
-        type="text"
-        value={editingName}
-        onChange={(e) => setEditingName(e.target.value)}
-        className="flex-1 rounded-lg border border-white/10 bg-black px-3 py-2 outline-none"
-      />
-    ) : (
-      <span className="font-medium">{subject.name}</span>
-    )}
-
-    <div className="flex gap-2">
-      {editingSubjectId === subject.id ? (
-        <>
-          <button
-            onClick={() => saveSubjectEdit(subject.id)}
-            className="rounded-lg border border-green-500/20 bg-green-500/10 px-4 py-2 text-sm text-green-400"
-          >
-            Save
-          </button>
-
-          <button
-            onClick={() => {
-              setEditingSubjectId(null);
-              setEditingName("");
-            }}
-            className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/60 hover:text-white"
-          >
-            Cancel
-          </button>
-        </>
-      ) : (
-        <>
-          <button
-            onClick={() => {
-              setEditingSubjectId(subject.id);
-              setEditingName(subject.name);
-            }}
-            className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm text-blue-400"
-          >
-            Edit
-          </button>
-
-          <button
-            onClick={() => deleteSubject(subject.id)}
-            className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/60 hover:text-white"
-          >
-            Delete
-          </button>
-        </>
-      )}
-    </div>
+     {isLoading ? (
+  <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
+    <p className="text-white/60">Loading subjects...</p>
   </div>
-))}
+) : subjects.length === 0 ? (
+  <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
+    <p className="text-white/60">No subjects yet.</p>
+  </div>
+) : (
+  <>
+    {subjects.map((subject) => (
+      <div
+        key={subject.id}
+        className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 px-5 py-4"
+      >
+        {editingSubjectId === subject.id ? (
+          <input
+            type="text"
+            value={editingName}
+            onChange={(e) => setEditingName(e.target.value)}
+            className="flex-1 rounded-lg border border-white/10 bg-black px-3 py-2 outline-none"
+          />
+        ) : (
+          <span className="font-medium">{subject.name}</span>
+        )}
+
+        <div className="flex gap-2">
+          {editingSubjectId === subject.id ? (
+            <>
+              <button
+                onClick={() => saveSubjectEdit(subject.id)}
+                className="rounded-lg border border-green-500/20 bg-green-500/10 px-4 py-2 text-sm text-green-400"
+              >
+                Save
+              </button>
+
+              <button
+                onClick={() => {
+                  setEditingSubjectId(null);
+                  setEditingName("");
+                }}
+                className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/60 hover:text-white"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  setEditingSubjectId(subject.id);
+                  setEditingName(subject.name);
+                }}
+                className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm text-blue-400"
+              >
+                Edit
+              </button>
+
+              <button
+                onClick={() => deleteSubject(subject.id)}
+                className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/60 hover:text-white"
+              >
+                Delete
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    ))}
+  </>
+)}
       </div>
     </main>
   );
