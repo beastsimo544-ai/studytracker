@@ -145,12 +145,9 @@ const weekSeconds = sessions
     return sessionDate >= startOfWeek && sessionDate <= endOfToday;
   })
   .reduce((total, session) => total + session.duration, 0);
-  const daysElapsedThisWeek = daysSinceMonday + 1;
-
-const monthSeconds = sessions
+  const monthSeconds = sessions
   .filter((session) => {
     const sessionDate = new Date(session.created_at);
-  
 
     return (
       sessionDate.getFullYear() === today.getFullYear() &&
@@ -158,9 +155,23 @@ const monthSeconds = sessions
     );
   })
   .reduce((total, session) => total + session.duration, 0);
-  const dailyAverageSeconds =
-  daysElapsedThisWeek > 0
-    ? Math.floor(weekSeconds / daysElapsedThisWeek)
+  const studiedDaysThisWeek = new Set(
+  sessions
+    .filter((session) => {
+      const sessionDate = new Date(session.created_at);
+
+      return sessionDate >= startOfWeek && sessionDate <= endOfToday;
+    })
+    .map((session) => {
+      const sessionDate = new Date(session.created_at);
+
+      return `${sessionDate.getFullYear()}-${sessionDate.getMonth()}-${sessionDate.getDate()}`;
+    })
+).size;
+
+const dailyAverageSeconds =
+  studiedDaysThisWeek > 0
+    ? Math.floor(weekSeconds / studiedDaysThisWeek)
     : 0;
     const weekData = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
   (dayLabel, index) => {
