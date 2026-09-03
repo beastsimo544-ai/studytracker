@@ -1,36 +1,113 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# StudyTracker
 
-## Getting Started
+StudyTracker is a responsive web application that helps students track their study time, organize subjects, monitor progress, and build consistent study habits.
 
-First, run the development server:
+## Live Demo
+
+https://studytracker-e2vs.vercel.app
+
+## Features
+
+- Email and password authentication
+- Personal user accounts
+- Create, rename, and delete subjects
+- Study timer with Start, Pause, Reset, and Finish controls
+- Timer state survives page refreshes
+- Study sessions saved to the database
+- Study history
+- Edit and delete previous sessions
+- Dashboard with:
+  - Study time today
+  - Study time this week
+  - Study time this month
+  - Daily study average
+  - Current study streak
+  - Longest study streak
+  - Custom daily study goal
+  - Weekly study chart
+  - Monthly study calendar
+  - Study time by subject
+  - Recent study sessions
+- Responsive design for desktop and mobile
+- User data protected with Supabase Row Level Security (RLS)
+
+## Tech Stack
+
+- **Next.js**
+- **React**
+- **TypeScript**
+- **Tailwind CSS**
+- **Supabase**
+  - Authentication
+  - PostgreSQL database
+  - Row Level Security
+- **Vercel** for deployment
+
+## How It Works
+
+1. Create an account and sign in.
+2. Add the subjects you want to study.
+3. Select a subject and start the study timer.
+4. Pause or resume the timer whenever needed.
+5. Finish the session to save it.
+6. View previous sessions in History.
+7. Use the Dashboard to monitor your study progress and consistency.
+
+## Running Locally
+
+Clone the repository:
+
+```bash
+git clone https://github.com/beastsimo544-ai/studytracker.git
+cd studytracker
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Create a `.env.local` file and add your Supabase environment variables:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
+```
+
+Run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Security
 
-## Learn More
+StudyTracker uses Supabase authentication and Row Level Security policies so authenticated users can only access their own study data.
 
-To learn more about Next.js, take a look at the following resources:
+Sensitive Supabase server-side credentials should never be committed to the repository.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Future Improvements
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Possible future improvements include:
 
-## Deploy on Vercel
+- Custom domain and production SMTP
+- Friends and study groups
+- Live study status with friends
+- Notifications and reminders
+- Achievements and gamification
+- More detailed statistics
+- Native mobile application
+- Additional account/profile settings
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Status
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**MVP completed and deployed.**
+
+The current version supports the complete core flow from account creation to tracking study sessions and reviewing study progress.
