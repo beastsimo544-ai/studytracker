@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function Navbar() {
+  const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -32,7 +34,8 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    window.location.href = "/login";
+    router.push("/login");
+    router.refresh();
   };
 
   return (
@@ -55,6 +58,7 @@ export default function Navbar() {
             <>
               <Link href="/subject">Subjects</Link>
               <Link href="/history">History</Link>
+              <Link href="/friends">Friends</Link>
             </>
           )}
 
@@ -126,6 +130,13 @@ export default function Navbar() {
                 onClick={() => setIsOpen(false)}
               >
                 History
+              </Link>
+
+              <Link
+                href="/friends"
+                onClick={() => setIsOpen(false)}
+              >
+                Friends
               </Link>
             </>
           )}

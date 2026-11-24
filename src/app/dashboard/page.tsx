@@ -75,6 +75,7 @@ const router = useRouter();
     const { data, error } = await supabase
       .from("study_sessions")
       .select("id, subject, duration, created_at")
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -311,7 +312,7 @@ let previousDay: number | null = null;
 studiedDays.forEach((dayTimestamp) => {
   if (
     previousDay !== null &&
-    dayTimestamp - previousDay === 24 * 60 * 60 * 1000
+    Math.round((dayTimestamp - previousDay) / (24 * 60 * 60 * 1000)) === 1
   ) {
     runningStreak += 1;
   } else {

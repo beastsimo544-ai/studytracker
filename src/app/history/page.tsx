@@ -33,21 +33,23 @@ const [editSubject, setEditSubject] = useState("");
         return;
       }
       const { data: subjectData, error: subjectError } = await supabase
-  .from("subjects")
-  .select("name")
-  .order("created_at", { ascending: true });
+        .from("subjects")
+        .select("name")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
 
-if (subjectError) {
-  console.error("Could not load subjects:", subjectError);
-} else {
-  setAvailableSubjects(
-    (subjectData || []).map((subject) => subject.name)
-  );
-}
+      if (subjectError) {
+        console.error("Could not load subjects:", subjectError);
+      } else {
+        setAvailableSubjects(
+          (subjectData || []).map((subject) => subject.name)
+        );
+      }
 
       const { data, error } = await supabase
         .from("study_sessions")
         .select("id, subject, duration, created_at")
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -77,28 +79,35 @@ if (subjectError) {
     return new Date(date).toLocaleString();
   };
   const deleteSession = async (id: number) => {
-  const confirmed = window.confirm(
-    "Are you sure you want to delete this study session?"
-  );
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this study session?"
+    );
 
+    if (!confirmed) return;
 
-  if (!confirmed) return;
+    const { data: deletedRows, error } = await supabase
+      .from("study_sessions")
+      .delete()
+      .eq("id", id)
+      .select("id");
 
-  const { error } = await supabase
-    .from("study_sessions")
-    .delete()
-    .eq("id", id);
+    if (error) {
+      console.error("Delete error:", error);
+      alert("Could not delete the session.");
+      return;
+    }
 
-  if (error) {
-    console.error("Delete error:", error);
-    alert("Could not delete the session.");
-    return;
-  }
+    if (!deletedRows || deletedRows.length === 0) {
+      alert(
+        "The database did not delete the session. Check that a DELETE RLS policy exists on study_sessions."
+      );
+      return;
+    }
 
-  setSessions((currentSessions) =>
-    currentSessions.filter((session) => session.id !== id)
-  );
-};
+    setSessions((currentSessions) =>
+      currentSessions.filter((session) => session.id !== id)
+    );
+  };
 const saveEdit = async (id: number) => {
   const cleanedSubject = editSubject.trim();
 
@@ -266,18 +275,20 @@ const saveEdit = async (id: number) => {
               >
                 <div>
                 {editingSessionId === session.id ? (
-  <select
-    value={editSubject}
-    onChange={(e) => setEditSubject(e.target.value)}
-    className="rounded-lg border border-white/10 bg-black px-3 py-2 text-white"
-  >
-    {availableSubjects.map((subject) => (
-      <option key={subject} value={subject}>
-        {subject}
-      </option>
-    ))}
-  </select>
-) : (
+                  <select
+                    value={editSubject}
+                    onChange={(e) => setEditSubject(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-black px-3 py-2 text-white"
+                  >
+                    {Array.from(
+                      new Set([session.subject, ...availableSubjects])
+                    ).map((subject) => (
+                      <option key={subject} value={subject}>
+                        {subject}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
   <p className="text-lg font-semibold">
     {session.subject}
   </p>

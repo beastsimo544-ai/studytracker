@@ -1,6 +1,8 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
-    <main className="flex min-h-screen items-center justify-center">
+    <main className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="text-center">
         <h1 className="text-5xl font-bold">
           Study Tracker
@@ -10,9 +12,12 @@ export default function Home() {
           Track your study time. Understand your progress.
         </p>
 
-        <button className="mt-8 rounded-lg bg-white px-6 py-3 font-semibold text-black">
+        <Link
+          href="/timer"
+          className="mt-8 inline-block rounded-lg bg-white px-6 py-3 font-semibold text-black transition hover:bg-white/90"
+        >
           Start Studying
-        </button>
+        </Link>
       </div>
     </main>
   );

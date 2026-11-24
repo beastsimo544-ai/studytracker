@@ -1,16 +1,22 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function Login() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
 
+    setIsSubmitting(true);
     setMessage("Logging in...");
 
     const { error } = await supabase.auth.signInWithPassword({
@@ -20,10 +26,14 @@ export default function Login() {
 
     if (error) {
       setMessage(error.message);
+      setIsSubmitting(false);
       return;
     }
 
-    setMessage("Login successful!");
+    setMessage("Login successful! Redirecting...");
+    const hasSavedTimer = Boolean(localStorage.getItem("studyTimer"));
+    router.push(hasSavedTimer ? "/timer" : "/dashboard");
+    router.refresh();
   };
 
   return (
@@ -63,9 +73,10 @@ export default function Login() {
 
         <button
           type="submit"
-          className="w-full rounded-xl bg-white px-5 py-3 font-semibold text-black"
+          disabled={isSubmitting}
+          className="w-full rounded-xl bg-white px-5 py-3 font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Login
+          {isSubmitting ? "Logging in..." : "Login"}
         </button>
       </form>
 
@@ -74,6 +85,13 @@ export default function Login() {
           {message}
         </p>
       )}
+
+      <p className="mt-6 text-sm text-white/60">
+        Don&apos;t have an account?{" "}
+        <Link href="/register" className="text-white underline">
+          Sign up
+        </Link>
+      </p>
     </main>
   );
 }
