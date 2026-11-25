@@ -109,6 +109,7 @@ export default function TimerPage() {
 
   const isSavingRef = useRef(false);
   const autoCompletingRef = useRef(false);
+  const noteInputRef = useRef<HTMLInputElement | null>(null);
 
   const isRunning = startedAt !== null;
   const hasSessionProgress = seconds > 0 || accumulatedMs > 0 || isRunning;
@@ -787,23 +788,59 @@ export default function TimerPage() {
 
         <div className="w-full max-w-md text-center">
           {hasSessionProgress ? (
-            <p className="text-xs font-medium tracking-wider uppercase text-white/50">
-              {selectedSubject || "Study"}
-            </p>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#111113] px-3.5 py-1.5">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: selectedColor }}
+              />
+              <span className="text-xs font-medium text-white/80">
+                {selectedSubject || "Study"}
+              </span>
+            </div>
           ) : (
-            <div className="mx-auto max-w-[240px]">
+            <div className="relative mx-auto inline-flex h-10 min-w-[200px] max-w-[260px] items-center rounded-full border border-white/12 bg-[#111113] px-4 transition hover:border-white/25">
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{
+                  backgroundColor: selectedColor,
+                  boxShadow: selectedSubject
+                    ? `0 0 8px ${selectedColor}66`
+                    : undefined,
+                }}
+              />
+              <span className="mx-2.5 flex-1 truncate text-left text-sm font-medium text-white/90">
+                {selectedSubject || "No subjects yet"}
+              </span>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                className="h-4 w-4 shrink-0 text-white/45"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
               <select
                 value={selectedSubject}
                 onChange={(e) => setSelectedSubject(e.target.value)}
                 disabled={subjects.length === 0}
                 aria-label="Subject"
-                className="h-10 w-full rounded-xl border border-white/10 bg-[#111113] px-3.5 text-center text-sm text-white/85 outline-none disabled:opacity-50"
+                className="absolute inset-0 h-full w-full cursor-pointer rounded-full bg-[#111113] text-white opacity-0 disabled:cursor-not-allowed"
               >
                 {subjects.length === 0 ? (
-                  <option value="">No subjects yet</option>
+                  <option value="" className="bg-[#111113] text-white">
+                    No subjects yet
+                  </option>
                 ) : (
                   subjects.map((subject) => (
-                    <option key={subject} value={subject}>
+                    <option
+                      key={subject}
+                      value={subject}
+                      className="bg-[#111113] text-white"
+                    >
                       {subject}
                     </option>
                   ))
@@ -919,9 +956,9 @@ export default function TimerPage() {
       )}
 
       {/* Main Timer Card (Fits cleanly on 1 mobile screen without scrolling) */}
-      <div className="mt-5 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:mt-7 sm:p-7">
+      <div className="mt-5 rounded-3xl border border-white/[0.08] bg-[#111113] p-4 sm:mt-6 sm:p-8">
         {timerMode === "pomodoro" && (
-          <div className="mb-4 space-y-3 border-b border-white/[0.08] pb-4">
+          <div className="mx-auto mb-5 max-w-lg space-y-3 border-b border-white/[0.08] pb-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="inline-flex rounded-xl border border-white/10 bg-[#09090b] p-1">
                 <button
@@ -1026,67 +1063,159 @@ export default function TimerPage() {
           </div>
         )}
 
-        {/* Subject + Session Note (Compact 2-col on desktop, tight stack on mobile) */}
+        {/* Unified Subject + Session Note Pod */}
         {!isBreakPhase && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 text-xs font-medium text-white/60">
-                  {selectedSubject && (
-                    <span
-                      className="h-2 w-2 rounded-full"
-                      style={{ backgroundColor: selectedColor }}
-                    />
+          <div className="mx-auto max-w-lg overflow-hidden rounded-2xl border border-white/10 bg-[#09090b] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition focus-within:border-white/20">
+            <div className="grid grid-cols-1 divide-y divide-white/[0.08] sm:grid-cols-[210px_1fr] sm:divide-x sm:divide-y-0">
+              {/* Left Segment: Subject Selector */}
+              <div
+                className={`relative px-4 py-2.5 transition ${
+                  hasSessionProgress
+                    ? "opacity-65"
+                    : "hover:bg-white/[0.025] focus-within:bg-white/[0.03]"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold tracking-wider uppercase text-white/40">
+                    Subject
+                  </span>
+                  {hasSessionProgress && (
+                    <span className="text-[10px] font-medium text-white/35">
+                      Locked
+                    </span>
                   )}
-                  <span>Subject</span>
-                </label>
+                </div>
 
-                {isLoggedIn && subjects.length === 0 && (
-                  <Link
-                    href="/subject"
-                    className="text-xs text-white underline hover:text-white/80"
-                  >
-                    Add subject →
-                  </Link>
+                {isLoggedIn && subjects.length === 0 ? (
+                  <div className="mt-1 flex h-6 items-center">
+                    <Link
+                      href="/subject"
+                      className="text-sm font-medium text-emerald-400 hover:underline"
+                    >
+                      + Add subject →
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="mt-1 flex h-6 items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/10"
+                        style={{
+                          backgroundColor: selectedColor,
+                          boxShadow: selectedSubject
+                            ? `0 0 10px ${selectedColor}66`
+                            : undefined,
+                        }}
+                      />
+                      <span className="truncate text-sm font-medium text-white">
+                        {selectedSubject || "No subjects yet"}
+                      </span>
+                    </div>
+
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                      className="h-4 w-4 shrink-0 text-white/40"
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+
+                    <select
+                      value={selectedSubject}
+                      onChange={(e) => setSelectedSubject(e.target.value)}
+                      disabled={hasSessionProgress || subjects.length === 0}
+                      aria-label="Subject"
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer bg-[#111113] text-white opacity-0 disabled:cursor-not-allowed"
+                    >
+                      {subjects.length === 0 ? (
+                        <option value="" className="bg-[#111113] text-white">
+                          No subjects yet
+                        </option>
+                      ) : (
+                        subjects.map((subject) => (
+                          <option
+                            key={subject}
+                            value={subject}
+                            className="bg-[#111113] text-white"
+                          >
+                            {subject}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
                 )}
               </div>
 
-              <select
-                value={selectedSubject}
-                onChange={(e) => setSelectedSubject(e.target.value)}
-                disabled={hasSessionProgress || subjects.length === 0}
-                className="mt-1.5 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              {/* Right Segment: Session Note */}
+              <div
+                onClick={() => noteInputRef.current?.focus()}
+                className="cursor-text px-4 py-2.5 transition hover:bg-white/[0.02] focus-within:bg-white/[0.03]"
               >
-                {subjects.length === 0 ? (
-                  <option value="">No subjects yet</option>
-                ) : (
-                  subjects.map((subject) => (
-                    <option key={subject} value={subject}>
-                      {subject}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold tracking-wider uppercase text-white/40">
+                    Session Note
+                  </span>
+                  <span className="text-[10px] tabular-nums text-white/30">
+                    {sessionNote.length > 0
+                      ? `${sessionNote.length}/140`
+                      : "Optional"}
+                  </span>
+                </div>
 
-            <div>
-              <label className="text-xs font-medium text-white/60">
-                Note <span className="text-white/35">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={sessionNote}
-                onChange={(e) => setSessionNote(e.target.value)}
-                maxLength={140}
-                placeholder="e.g. Chapitre 3 — Exercices"
-                className="mt-1.5 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none focus:border-white/25"
-              />
+                <div className="relative mt-1 flex h-6 items-center">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                    className="mr-2 h-3.5 w-3.5 shrink-0 text-white/35"
+                  >
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  </svg>
+
+                  <input
+                    ref={noteInputRef}
+                    type="text"
+                    value={sessionNote}
+                    onChange={(e) => setSessionNote(e.target.value)}
+                    maxLength={140}
+                    placeholder="What are you working on?"
+                    aria-label="Session Note"
+                    className="h-6 w-full bg-transparent pr-6 text-sm text-white placeholder:text-white/30 outline-none"
+                  />
+
+                  {sessionNote.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSessionNote("");
+                        noteInputRef.current?.focus();
+                      }}
+                      aria-label="Clear note"
+                      className="absolute right-0 flex h-5 w-5 items-center justify-center rounded-full text-[11px] text-white/40 transition hover:bg-white/10 hover:text-white"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
 
         {/* Proportioned Timer Readout */}
-        <div className="py-8 text-center sm:py-12">
+        <div className="py-9 text-center sm:py-12">
           {isBreakPhase && (
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-emerald-400">
               Break Time
@@ -1110,8 +1239,8 @@ export default function TimerPage() {
           )}
         </div>
 
-        {/* Single-Row Balanced Controls (Mobile & Desktop) */}
-        <div className="mx-auto grid max-w-md grid-cols-[1fr_1.35fr_1fr] gap-2.5 sm:gap-3">
+        {/* Single-Row Balanced Controls (Aligned with Session Pod) */}
+        <div className="mx-auto grid max-w-lg grid-cols-[1fr_1.35fr_1fr] gap-2.5 sm:gap-3">
           <button
             onClick={resetTimer}
             className="h-11 rounded-xl border border-white/15 text-xs font-semibold text-white/80 transition hover:bg-white/5 sm:text-sm"
