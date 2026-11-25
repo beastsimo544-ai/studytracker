@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import UserAvatar from "@/components/user-avatar";
 import { supabase } from "@/lib/supabase";
 
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string>("?");
 
   const normalizedPath =
     pathname && pathname !== "/" ? pathname.replace(/\/+$/, "") : "/";
@@ -16,12 +19,38 @@ export default function Navbar() {
   const isActive = (href: string) => normalizedPath === href;
 
   useEffect(() => {
+    const loadProfileBadge = async (userId: string, email?: string) => {
+      const res = await supabase
+        .from("profiles")
+        .select("username, avatar_url")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (res.error && res.error.message.includes("avatar_url")) {
+        const fallback = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("user_id", userId)
+          .maybeSingle();
+        setDisplayName(fallback.data?.username || email || "?");
+        setAvatarUrl(null);
+      } else {
+        setDisplayName(res.data?.username || email || "?");
+        setAvatarUrl(res.data?.avatar_url ?? null);
+      }
+    };
+
     const checkUser = async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       setIsLoggedIn(!!user);
+      if (user) {
+        await loadProfileBadge(user.id, user.email);
+      } else {
+        setAvatarUrl(null);
+      }
     };
 
     checkUser();
@@ -29,11 +58,25 @@ export default function Navbar() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsLoggedIn(!!session?.user);
+      const user = session?.user;
+      setIsLoggedIn(!!user);
+      if (user) {
+        loadProfileBadge(user.id, user.email);
+      } else {
+        setAvatarUrl(null);
+      }
     });
+
+    const handleAvatarUpdated = (event: Event) => {
+      const custom = event as CustomEvent<{ avatarUrl: string | null }>;
+      setAvatarUrl(custom.detail?.avatarUrl ?? null);
+    };
+
+    window.addEventListener("profile-avatar-updated", handleAvatarUpdated);
 
     return () => {
       subscription.unsubscribe();
+      window.removeEventListener("profile-avatar-updated", handleAvatarUpdated);
     };
   }, []);
 
@@ -272,13 +315,18 @@ export default function Navbar() {
                   </Link>
                   <Link
                     href="/settings"
-                    className={
+                    className={`flex items-center gap-2 ${
                       isActive("/settings")
                         ? "font-semibold text-white"
                         : "text-white/70 transition hover:text-white"
-                    }
+                    }`}
                   >
-                    Settings
+                    <UserAvatar
+                      avatarUrl={avatarUrl}
+                      name={displayName}
+                      size="xs"
+                    />
+                    <span>Settings</span>
                   </Link>
                 </>
               )}
@@ -309,31 +357,22 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* Mobile top right actions (Settings + Logout when signed in) */}
-            <div className="flex items-center gap-2 md:hidden">
+            {/* Mobile top right actions (Avatar -> Settings + Logout) */}
+            <div className="flex items-center gap-2.5 md:hidden">
               {isLoggedIn && (
                 <>
                   <Link
                     href="/settings"
                     aria-label="Account Settings"
-                    className={`rounded-lg border px-2.5 py-1.5 transition ${
-                      isActive("/settings")
-                        ? "border-white/40 bg-white/15 text-white"
-                        : "border-white/15 text-white/75 active:bg-white/10"
+                    className={`rounded-full p-0.5 transition ${
+                      isActive("/settings") ? "ring-2 ring-white" : ""
                     }`}
                   >
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="h-4 w-4"
-                    >
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
+                    <UserAvatar
+                      avatarUrl={avatarUrl}
+                      name={displayName}
+                      size="xs"
+                    />
                   </Link>
 
                   <button

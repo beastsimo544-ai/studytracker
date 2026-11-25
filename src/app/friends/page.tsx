@@ -1,12 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import UserAvatar from "@/components/user-avatar";
+import { notifyAvatarUpdated, resizeAvatarFile } from "@/lib/avatar";
 import { supabase } from "@/lib/supabase";
 
 type ProfileRow = {
   user_id: string;
   username: string | null;
+  avatar_url?: string | null;
   daily_goal_minutes?: number | null;
   studying_subject?: string | null;
   studying_started_at?: string | null;
@@ -28,6 +31,7 @@ type SubjectSummary = {
 type LeaderboardEntry = {
   user_id: string;
   username: string;
+  avatar_url: string | null;
   is_self: boolean;
   today_seconds: number;
   week_seconds: number;
@@ -39,7 +43,7 @@ type LeaderboardEntry = {
 };
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,24}$/;
-const MAX_LIVE_SESSION_MS = 6 * 60 * 60 * 1000; // Hide stale live status older than 6h
+const MAX_LIVE_SESSION_MS = 6 * 60 * 60 * 1000;
 
 function toLocalDateKey(date: Date) {
   const y = date.getFullYear();
@@ -125,13 +129,17 @@ function formatLiveElapsed(startedAtIso: string, nowMs: number) {
 
 export default function FriendsPage() {
   const router = useRouter();
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [myUsername, setMyUsername] = useState<string | null>(null);
+  const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null);
+  const [hasProfileRow, setHasProfileRow] = useState(false);
   const [dailyGoalMinutes, setDailyGoalMinutes] = useState(120);
   const [usernameInput, setUsernameInput] = useState("");
   const [usernameMessage, setUsernameMessage] = useState("");
   const [isSavingUsername, setIsSavingUsername] = useState(false);
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
   const [isEditingUsername, setIsEditingUsername] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -141,6 +149,9 @@ export default function FriendsPage() {
 
   const [friendships, setFriendships] = useState<FriendshipRow[]>([]);
   const [usernamesById, setUsernamesById] = useState<Record<string, string>>(
+    {}
+  );
+  const [avatarsById, setAvatarsById] = useState<Record<string, string | null>>(
     {}
   );
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -155,36 +166,51 @@ export default function FriendsPage() {
   const loadFriendsData = useCallback(async (userId: string) => {
     const { todayStart, weekStart, streakWindowStart } = getTimeBoundaries();
 
-    // 1. Load current user's profile (with graceful fallback if live-status columns aren't added yet)
+    // 1. Load current user's profile with graceful column fallbacks
     let myProfile: ProfileRow | null = null;
 
     const fullProfileRes = await supabase
       .from("profiles")
       .select(
-        "user_id, username, daily_goal_minutes, studying_subject, studying_started_at"
+        "user_id, username, avatar_url, daily_goal_minutes, studying_subject, studying_started_at"
       )
       .eq("user_id", userId)
       .maybeSingle();
 
     if (fullProfileRes.error) {
-      if (fullProfileRes.error.message.includes("studying_")) {
-        const basicProfileRes = await supabase
+      if (
+        fullProfileRes.error.message.includes("avatar_url") ||
+        fullProfileRes.error.message.includes("studying_")
+      ) {
+        const midRes = await supabase
           .from("profiles")
-          .select("user_id, username, daily_goal_minutes")
+          .select(
+            "user_id, username, daily_goal_minutes, studying_subject, studying_started_at"
+          )
           .eq("user_id", userId)
           .maybeSingle();
 
-        if (basicProfileRes.error) {
-          if (
-            basicProfileRes.error.message.includes("username") ||
-            basicProfileRes.error.code === "42703"
-          ) {
-            setSetupRequired(true);
-            setIsLoading(false);
-            return;
-          }
+        if (!midRes.error) {
+          myProfile = midRes.data as ProfileRow | null;
         } else {
-          myProfile = basicProfileRes.data as ProfileRow | null;
+          const basicProfileRes = await supabase
+            .from("profiles")
+            .select("user_id, username, daily_goal_minutes")
+            .eq("user_id", userId)
+            .maybeSingle();
+
+          if (basicProfileRes.error) {
+            if (
+              basicProfileRes.error.message.includes("username") ||
+              basicProfileRes.error.code === "42703"
+            ) {
+              setSetupRequired(true);
+              setIsLoading(false);
+              return;
+            }
+          } else {
+            myProfile = basicProfileRes.data as ProfileRow | null;
+          }
         }
       } else if (
         fullProfileRes.error.message.includes("username") ||
@@ -201,9 +227,14 @@ export default function FriendsPage() {
     }
 
     let resolvedMyUsername: string | null = null;
+    let resolvedMyAvatar: string | null = null;
+
     if (myProfile) {
+      setHasProfileRow(true);
       resolvedMyUsername = myProfile.username ?? null;
+      resolvedMyAvatar = myProfile.avatar_url ?? null;
       setMyUsername(resolvedMyUsername);
+      setMyAvatarUrl(resolvedMyAvatar);
       setUsernameInput(resolvedMyUsername ?? "");
       if (typeof myProfile.daily_goal_minutes === "number") {
         setDailyGoalMinutes(myProfile.daily_goal_minutes);
@@ -232,7 +263,7 @@ export default function FriendsPage() {
     const typedFriendships = (friendshipRows || []) as FriendshipRow[];
     setFriendships(typedFriendships);
 
-    // Fetch usernames + live status for everyone involved in friendships
+    // Fetch usernames + avatars + live status for everyone involved in friendships
     const otherUserIds = Array.from(
       new Set(
         typedFriendships.map((f) =>
@@ -242,6 +273,9 @@ export default function FriendsPage() {
     );
 
     const usernameMap: Record<string, string> = {};
+    const avatarMap: Record<string, string | null> = {
+      [userId]: resolvedMyAvatar,
+    };
     const liveStatusMap: Record<
       string,
       { subject: string | null; startedAt: string | null }
@@ -257,20 +291,28 @@ export default function FriendsPage() {
     if (otherUserIds.length > 0) {
       const fullRelatedRes = await supabase
         .from("profiles")
-        .select("user_id, username, studying_subject, studying_started_at")
+        .select(
+          "user_id, username, avatar_url, studying_subject, studying_started_at"
+        )
         .in("user_id", otherUserIds);
 
       let relatedProfiles: ProfileRow[] | null = null;
 
-      if (
-        fullRelatedRes.error &&
-        fullRelatedRes.error.message.includes("studying_")
-      ) {
-        const basicRelatedRes = await supabase
+      if (fullRelatedRes.error) {
+        const midRelatedRes = await supabase
           .from("profiles")
-          .select("user_id, username")
+          .select("user_id, username, studying_subject, studying_started_at")
           .in("user_id", otherUserIds);
-        relatedProfiles = (basicRelatedRes.data || []) as ProfileRow[];
+
+        if (!midRelatedRes.error) {
+          relatedProfiles = (midRelatedRes.data || []) as ProfileRow[];
+        } else {
+          const basicRelatedRes = await supabase
+            .from("profiles")
+            .select("user_id, username")
+            .in("user_id", otherUserIds);
+          relatedProfiles = (basicRelatedRes.data || []) as ProfileRow[];
+        }
       } else {
         relatedProfiles = (fullRelatedRes.data || []) as ProfileRow[];
       }
@@ -279,6 +321,7 @@ export default function FriendsPage() {
         if (p.username) {
           usernameMap[p.user_id] = p.username;
         }
+        avatarMap[p.user_id] = p.avatar_url ?? null;
         liveStatusMap[p.user_id] = {
           subject: p.studying_subject ?? null,
           startedAt: p.studying_started_at ?? null,
@@ -287,6 +330,7 @@ export default function FriendsPage() {
     }
 
     setUsernamesById(usernameMap);
+    setAvatarsById(avatarMap);
 
     // 3. Build daily/weekly leaderboard + streaks for you + accepted friends
     const acceptedFriendIds = typedFriendships
@@ -379,6 +423,7 @@ export default function FriendsPage() {
         return {
           user_id: memberId,
           username: displayUsername,
+          avatar_url: avatarMap[memberId] ?? null,
           is_self: memberId === userId,
           today_seconds: todaySeconds,
           week_seconds: weekSeconds,
@@ -417,7 +462,6 @@ export default function FriendsPage() {
 
     init();
 
-    // Poll every 25s + subscribe to profile changes so Live "Studying Now" stays fresh
     const pollInterval = setInterval(() => {
       if (activeUserId) {
         loadFriendsData(activeUserId);
@@ -443,7 +487,6 @@ export default function FriendsPage() {
     };
   }, [router, loadFriendsData]);
 
-  // Tick live elapsed counter every second when anyone on the leaderboard is studying right now
   const hasAnyoneStudyingLive = leaderboard.some((e) =>
     Boolean(e.studying_subject && e.studying_started_at)
   );
@@ -494,11 +537,59 @@ export default function FriendsPage() {
       return;
     }
 
+    setHasProfileRow(true);
     setMyUsername(cleaned);
     setUsernameInput(cleaned);
     setIsEditingUsername(false);
     setUsernameMessage("Username saved!");
     await loadFriendsData(currentUserId);
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !currentUserId) return;
+
+    try {
+      setIsSavingAvatar(true);
+      setUsernameMessage("Uploading photo...");
+      const dataUrl = await resizeAvatarFile(file);
+
+      const res = hasProfileRow
+        ? await supabase
+            .from("profiles")
+            .update({ avatar_url: dataUrl })
+            .eq("user_id", currentUserId)
+        : await supabase.from("profiles").insert({
+            user_id: currentUserId,
+            avatar_url: dataUrl,
+            daily_goal_minutes: dailyGoalMinutes,
+          });
+
+      setIsSavingAvatar(false);
+
+      if (res.error) {
+        if (res.error.message.includes("avatar_url")) {
+          setUsernameMessage(
+            "Run `ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url text;` in Supabase SQL Editor first."
+          );
+        } else {
+          setUsernameMessage(`Could not save photo: ${res.error.message}`);
+        }
+        return;
+      }
+
+      setHasProfileRow(true);
+      setMyAvatarUrl(dataUrl);
+      notifyAvatarUpdated(dataUrl);
+      setUsernameMessage("Profile picture updated!");
+      await loadFriendsData(currentUserId);
+    } catch (err) {
+      setIsSavingAvatar(false);
+      setUsernameMessage(
+        err instanceof Error ? err.message : "Could not process image."
+      );
+    }
   };
 
   const handleSearchUsers = async (e: React.FormEvent) => {
@@ -517,23 +608,44 @@ export default function FriendsPage() {
 
     const escaped = cleaned.replace(/[%_]/g, "\\$&");
 
-    const { data, error } = await supabase
+    const fullSearch = await supabase
       .from("profiles")
-      .select("user_id, username")
+      .select("user_id, username, avatar_url")
       .not("username", "is", null)
       .neq("user_id", currentUserId)
       .ilike("username", `%${escaped}%`)
       .limit(8);
 
+    if (fullSearch.error && fullSearch.error.message.includes("avatar_url")) {
+      const fallbackSearch = await supabase
+        .from("profiles")
+        .select("user_id, username")
+        .not("username", "is", null)
+        .neq("user_id", currentUserId)
+        .ilike("username", `%${escaped}%`)
+        .limit(8);
+
+      setIsSearching(false);
+
+      if (fallbackSearch.error) {
+        console.error("User search error:", fallbackSearch.error);
+        alert("Could not search usernames.");
+        return;
+      }
+
+      setSearchResults((fallbackSearch.data || []) as ProfileRow[]);
+      return;
+    }
+
     setIsSearching(false);
 
-    if (error) {
-      console.error("User search error:", error);
+    if (fullSearch.error) {
+      console.error("User search error:", fullSearch.error);
       alert("Could not search usernames.");
       return;
     }
 
-    setSearchResults((data || []) as ProfileRow[]);
+    setSearchResults((fullSearch.data || []) as ProfileRow[]);
   };
 
   const sendFriendRequest = async (targetUserId: string) => {
@@ -675,32 +787,66 @@ export default function FriendsPage() {
         </p>
       </div>
 
-      {/* YOUR USERNAME CARD */}
+      {/* YOUR PROFILE & USERNAME CARD */}
       <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-sm text-white/50">Your username</p>
-            {myUsername && !isEditingUsername ? (
-              <p className="mt-1 font-mono text-xl font-bold">@{myUsername}</p>
-            ) : (
-              <p className="mt-1 text-sm text-white/70">
-                Choose a unique @username so friends can find and add you.
-              </p>
-            )}
+          <div className="flex items-center gap-4">
+            <UserAvatar
+              avatarUrl={myAvatarUrl}
+              name={myUsername || "you"}
+              size="lg"
+            />
+
+            <div>
+              <p className="text-sm text-white/50">Your profile</p>
+              {myUsername && !isEditingUsername ? (
+                <p className="mt-0.5 font-mono text-xl font-bold">
+                  @{myUsername}
+                </p>
+              ) : (
+                <p className="mt-0.5 text-sm text-white/70">
+                  Choose a unique @username so friends can find and add you.
+                </p>
+              )}
+            </div>
           </div>
 
-          {myUsername && !isEditingUsername && (
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={avatarFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarUpload}
+              className="hidden"
+            />
+
             <button
-              onClick={() => {
-                setUsernameInput(myUsername);
-                setUsernameMessage("");
-                setIsEditingUsername(true);
-              }}
-              className="rounded-lg border border-white/20 px-4 py-2 text-sm transition hover:bg-white/5"
+              type="button"
+              disabled={isSavingAvatar}
+              onClick={() => avatarFileInputRef.current?.click()}
+              className="rounded-lg border border-white/20 px-4 py-2 text-sm transition hover:bg-white/5 disabled:opacity-50"
             >
-              Change username
+              {isSavingAvatar
+                ? "Uploading..."
+                : myAvatarUrl
+                  ? "Change photo"
+                  : "Upload photo"}
             </button>
-          )}
+
+            {myUsername && !isEditingUsername && (
+              <button
+                type="button"
+                onClick={() => {
+                  setUsernameInput(myUsername);
+                  setUsernameMessage("");
+                  setIsEditingUsername(true);
+                }}
+                className="rounded-lg border border-white/20 px-4 py-2 text-sm transition hover:bg-white/5"
+              >
+                Change username
+              </button>
+            )}
+          </div>
         </div>
 
         {(!myUsername || isEditingUsername) && (
@@ -771,9 +917,16 @@ export default function FriendsPage() {
                       key={req.id}
                       className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-3"
                     >
-                      <span className="font-mono font-medium">
-                        @{senderName}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <UserAvatar
+                          avatarUrl={avatarsById[req.requester_id]}
+                          name={senderName}
+                          size="sm"
+                        />
+                        <span className="font-mono font-medium">
+                          @{senderName}
+                        </span>
+                      </div>
 
                       <div className="flex gap-2">
                         <button
@@ -813,9 +966,16 @@ export default function FriendsPage() {
                       key={req.id}
                       className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-3"
                     >
-                      <span className="font-mono text-white/80">
-                        @{recipientName}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <UserAvatar
+                          avatarUrl={avatarsById[req.addressee_id]}
+                          name={recipientName}
+                          size="sm"
+                        />
+                        <span className="font-mono text-white/80">
+                          @{recipientName}
+                        </span>
+                      </div>
 
                       <button
                         onClick={() => removeFriendship(req.id)}
@@ -875,9 +1035,16 @@ export default function FriendsPage() {
                     key={profile.user_id}
                     className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-black/40 px-4 py-3"
                   >
-                    <span className="font-mono font-medium">
-                      @{profile.username}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <UserAvatar
+                        avatarUrl={profile.avatar_url}
+                        name={profile.username}
+                        size="sm"
+                      />
+                      <span className="font-mono font-medium">
+                        @{profile.username}
+                      </span>
+                    </div>
 
                     {!relation ? (
                       <button
@@ -924,7 +1091,6 @@ export default function FriendsPage() {
             </p>
           </div>
 
-          {/* Daily / Weekly Switcher */}
           <div className="inline-flex rounded-xl border border-white/10 bg-white/5 p-1">
             <button
               type="button"
@@ -996,10 +1162,16 @@ export default function FriendsPage() {
                   }`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <span className="w-8 text-center text-xl font-bold">
+                    <div className="flex items-center gap-3.5">
+                      <span className="w-7 text-center text-xl font-bold">
                         {medal}
                       </span>
+
+                      <UserAvatar
+                        avatarUrl={entry.avatar_url}
+                        name={entry.username}
+                        size="md"
+                      />
 
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -1038,7 +1210,6 @@ export default function FriendsPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3 sm:gap-5">
-                      {/* Daily study time */}
                       <div
                         className={`rounded-xl border px-3.5 py-2 text-right transition ${
                           leaderboardPeriod === "today"
@@ -1054,7 +1225,6 @@ export default function FriendsPage() {
                         </p>
                       </div>
 
-                      {/* Weekly study time */}
                       <div
                         className={`rounded-xl border px-3.5 py-2 text-right transition ${
                           leaderboardPeriod === "week"
@@ -1086,7 +1256,6 @@ export default function FriendsPage() {
                     </div>
                   </div>
 
-                  {/* Relative progress bar */}
                   <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
                     <div
                       className="h-full rounded-full bg-white transition-all"
@@ -1094,7 +1263,6 @@ export default function FriendsPage() {
                     />
                   </div>
 
-                  {/* Subjects studied in selected period */}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     {activeSubjects.length === 0 ? (
                       <span className="text-xs text-white/40">

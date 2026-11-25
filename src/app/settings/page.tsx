@@ -2,15 +2,22 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import UserAvatar from "@/components/user-avatar";
+import { notifyAvatarUpdated, resizeAvatarFile } from "@/lib/avatar";
 import { supabase } from "@/lib/supabase";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [hasProfileRow, setHasProfileRow] = useState(false);
+  const [avatarMessage, setAvatarMessage] = useState("");
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const [newPassword, setNewPassword] = useState("");
@@ -35,14 +42,27 @@ export default function SettingsPage() {
       setUserId(user.id);
       setEmail(user.email ?? "");
 
-      const { data: profile } = await supabase
+      const fullRes = await supabase
         .from("profiles")
-        .select("username")
+        .select("username, avatar_url")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (profile?.username) {
-        setUsername(profile.username);
+      if (fullRes.error && fullRes.error.message.includes("avatar_url")) {
+        const fallbackRes = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (fallbackRes.data) {
+          setHasProfileRow(true);
+          setUsername(fallbackRes.data.username ?? null);
+        }
+      } else if (fullRes.data) {
+        setHasProfileRow(true);
+        setUsername(fullRes.data.username ?? null);
+        setAvatarUrl(fullRes.data.avatar_url ?? null);
       }
 
       setIsLoading(false);
@@ -50,6 +70,61 @@ export default function SettingsPage() {
 
     loadAccount();
   }, [router]);
+
+  const saveAvatarToDb = async (nextAvatarUrl: string | null) => {
+    if (!userId) return;
+    setIsSavingAvatar(true);
+    setAvatarMessage("");
+
+    const result = hasProfileRow
+      ? await supabase
+          .from("profiles")
+          .update({ avatar_url: nextAvatarUrl })
+          .eq("user_id", userId)
+      : await supabase.from("profiles").insert({
+          user_id: userId,
+          avatar_url: nextAvatarUrl,
+          daily_goal_minutes: 120,
+        });
+
+    setIsSavingAvatar(false);
+
+    if (result.error) {
+      if (result.error.message.includes("avatar_url")) {
+        setAvatarMessage(
+          "Run `ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url text;` in Supabase SQL Editor first."
+        );
+      } else {
+        setAvatarMessage(`Could not save photo: ${result.error.message}`);
+      }
+      return;
+    }
+
+    setHasProfileRow(true);
+    setAvatarUrl(nextAvatarUrl);
+    notifyAvatarUpdated(nextAvatarUrl);
+    setAvatarMessage(
+      nextAvatarUrl ? "Profile picture updated!" : "Profile picture removed."
+    );
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    try {
+      setIsSavingAvatar(true);
+      setAvatarMessage("Processing image...");
+      const dataUrl = await resizeAvatarFile(file);
+      await saveAvatarToDb(dataUrl);
+    } catch (err) {
+      setIsSavingAvatar(false);
+      setAvatarMessage(
+        err instanceof Error ? err.message : "Could not process image."
+      );
+    }
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,7 +171,6 @@ export default function SettingsPage() {
     setIsDeletingAccount(true);
 
     try {
-      // 1. Delete all user data across public tables
       await supabase.from("study_sessions").delete().eq("user_id", userId);
       await supabase.from("subjects").delete().eq("user_id", userId);
       await supabase
@@ -105,14 +179,13 @@ export default function SettingsPage() {
         .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
       await supabase.from("profiles").delete().eq("user_id", userId);
 
-      // 2. Delete auth.users account via secure RPC (if installed in Supabase)
       const { error: rpcError } = await supabase.rpc("delete_my_account");
       if (rpcError) {
         console.warn("delete_my_account RPC note:", rpcError.message);
       }
 
-      // 3. Clear local state and sign out
       localStorage.removeItem("studyTimer");
+      notifyAvatarUpdated(null);
       await supabase.auth.signOut();
 
       alert("Your account and study data have been deleted.");
@@ -140,13 +213,65 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-3xl font-bold">Account Settings</h1>
         <p className="mt-2 text-white/60">
-          Manage your profile, password, privacy, and account data.
+          Manage your profile picture, password, privacy, and account data.
         </p>
       </div>
 
-      {/* PROFILE SUMMARY */}
+      {/* PROFILE PICTURE & ACCOUNT SUMMARY */}
       <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
-        <h2 className="text-lg font-semibold">Account Information</h2>
+        <h2 className="text-lg font-semibold">Profile</h2>
+
+        <div className="mt-5 flex flex-wrap items-center gap-5 border-b border-white/10 pb-6">
+          <UserAvatar
+            avatarUrl={avatarUrl}
+            name={username || email}
+            size="lg"
+          />
+
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+
+              <button
+                type="button"
+                disabled={isSavingAvatar}
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+              >
+                {isSavingAvatar
+                  ? "Saving..."
+                  : avatarUrl
+                    ? "Change Photo"
+                    : "Upload Photo"}
+              </button>
+
+              {avatarUrl && (
+                <button
+                  type="button"
+                  disabled={isSavingAvatar}
+                  onClick={() => saveAvatarToDb(null)}
+                  className="rounded-xl border border-white/15 px-4 py-2 text-sm text-white/70 transition hover:text-white disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+
+            <p className="text-xs text-white/45">
+              PNG, JPG, or WebP · Automatically cropped to a square
+            </p>
+
+            {avatarMessage && (
+              <p className="text-xs text-white/75">{avatarMessage}</p>
+            )}
+          </div>
+        </div>
 
         <div className="mt-4 space-y-3 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
