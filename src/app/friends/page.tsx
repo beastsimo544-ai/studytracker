@@ -29,7 +29,8 @@ type LeaderboardEntry = {
   is_self: boolean;
   today_seconds: number;
   week_seconds: number;
-  top_subjects: SubjectSummary[];
+  today_subjects: SubjectSummary[];
+  week_subjects: SubjectSummary[];
 };
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,24}$/;
@@ -89,6 +90,9 @@ export default function FriendsPage() {
     {}
   );
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<"today" | "week">(
+    "week"
+  );
 
   const [isLoading, setIsLoading] = useState(true);
   const [setupRequired, setSetupRequired] = useState(false);
@@ -204,7 +208,8 @@ export default function FriendsPage() {
 
         let todaySeconds = 0;
         let weekSeconds = 0;
-        const subjectSeconds: Record<string, number> = {};
+        const todaySubjectSeconds: Record<string, number> = {};
+        const weekSubjectSeconds: Record<string, number> = {};
 
         memberSessions.forEach((s) => {
           const created = new Date(s.created_at);
@@ -212,15 +217,26 @@ export default function FriendsPage() {
 
           if (created >= todayStart) {
             todaySeconds += dur;
+            todaySubjectSeconds[s.subject] =
+              (todaySubjectSeconds[s.subject] || 0) + dur;
           }
           if (created >= weekStart) {
             weekSeconds += dur;
-            subjectSeconds[s.subject] =
-              (subjectSeconds[s.subject] || 0) + dur;
+            weekSubjectSeconds[s.subject] =
+              (weekSubjectSeconds[s.subject] || 0) + dur;
           }
         });
 
-        const topSubjects: SubjectSummary[] = Object.entries(subjectSeconds)
+        const todaySubjects: SubjectSummary[] = Object.entries(
+          todaySubjectSeconds
+        )
+          .map(([subject, seconds]) => ({ subject, seconds }))
+          .sort((a, b) => b.seconds - a.seconds)
+          .slice(0, 3);
+
+        const weekSubjects: SubjectSummary[] = Object.entries(
+          weekSubjectSeconds
+        )
           .map(([subject, seconds]) => ({ subject, seconds }))
           .sort((a, b) => b.seconds - a.seconds)
           .slice(0, 3);
@@ -236,7 +252,8 @@ export default function FriendsPage() {
           is_self: memberId === userId,
           today_seconds: todaySeconds,
           week_seconds: weekSeconds,
-          top_subjects: topSubjects,
+          today_subjects: todaySubjects,
+          week_subjects: weekSubjects,
         };
       })
       .sort(
@@ -429,8 +446,20 @@ export default function FriendsPage() {
         (f.addressee_id === currentUserId && f.requester_id === otherUserId)
     );
 
-  const maxWeekSeconds = Math.max(
-    ...leaderboard.map((entry) => entry.week_seconds),
+  const sortedLeaderboard = [...leaderboard].sort((a, b) =>
+    leaderboardPeriod === "today"
+      ? b.today_seconds - a.today_seconds ||
+        b.week_seconds - a.week_seconds ||
+        a.username.localeCompare(b.username)
+      : b.week_seconds - a.week_seconds ||
+        b.today_seconds - a.today_seconds ||
+        a.username.localeCompare(b.username)
+  );
+
+  const maxPeriodSeconds = Math.max(
+    ...sortedLeaderboard.map((entry) =>
+      leaderboardPeriod === "today" ? entry.today_seconds : entry.week_seconds
+    ),
     1
   );
 
@@ -470,7 +499,7 @@ export default function FriendsPage() {
         <h1 className="text-3xl font-bold">Friends</h1>
         <p className="mt-2 text-white/60">
           Add friends by username and see what and how much everyone is studying
-          this week.
+          today and this week.
         </p>
       </div>
 
@@ -707,22 +736,56 @@ export default function FriendsPage() {
         )}
       </section>
 
-      {/* WEEKLY LEADERBOARD & STUDY BREAKDOWN */}
+      {/* DAILY & WEEKLY LEADERBOARD */}
       <section className="mt-10">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-xl font-semibold">Weekly Leaderboard</h2>
-          <p className="text-sm text-white/50">
-            Resets every Monday · Ranked by study time this week
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">
+              {leaderboardPeriod === "today"
+                ? "Daily Leaderboard"
+                : "Weekly Leaderboard"}
+            </h2>
+            <p className="mt-1 text-sm text-white/50">
+              {leaderboardPeriod === "today"
+                ? "Ranked by study time today"
+                : "Resets every Monday · Ranked by study time this week"}
+            </p>
+          </div>
+
+          {/* Daily / Weekly Switcher */}
+          <div className="inline-flex rounded-xl border border-white/10 bg-white/5 p-1">
+            <button
+              type="button"
+              onClick={() => setLeaderboardPeriod("today")}
+              className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${
+                leaderboardPeriod === "today"
+                  ? "bg-white text-black"
+                  : "text-white/65 hover:text-white"
+              }`}
+            >
+              Daily
+            </button>
+            <button
+              type="button"
+              onClick={() => setLeaderboardPeriod("week")}
+              className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${
+                leaderboardPeriod === "week"
+                  ? "bg-white text-black"
+                  : "text-white/65 hover:text-white"
+              }`}
+            >
+              Weekly
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 space-y-3">
-          {leaderboard.length === 0 ? (
+          {sortedLeaderboard.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
               <p className="text-white/60">No study activity yet.</p>
             </div>
           ) : (
-            leaderboard.map((entry, index) => {
+            sortedLeaderboard.map((entry, index) => {
               const rank = index + 1;
               const medal =
                 rank === 1
@@ -732,10 +795,18 @@ export default function FriendsPage() {
                     : rank === 3
                       ? "🥉"
                       : `#${rank}`;
+              const activeSeconds =
+                leaderboardPeriod === "today"
+                  ? entry.today_seconds
+                  : entry.week_seconds;
               const progressPercent =
-                entry.week_seconds > 0
-                  ? Math.max((entry.week_seconds / maxWeekSeconds) * 100, 4)
+                activeSeconds > 0
+                  ? Math.max((activeSeconds / maxPeriodSeconds) * 100, 4)
                   : 0;
+              const activeSubjects =
+                leaderboardPeriod === "today"
+                  ? entry.today_subjects
+                  : entry.week_subjects;
               const relation = !entry.is_self
                 ? findRelationship(entry.user_id)
                 : undefined;
@@ -755,31 +826,47 @@ export default function FriendsPage() {
                         {medal}
                       </span>
 
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-lg font-bold">
-                            @{entry.username}
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-lg font-bold">
+                          @{entry.username}
+                        </span>
+                        {entry.is_self && (
+                          <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-medium text-white/90">
+                            You
                           </span>
-                          {entry.is_self && (
-                            <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-medium text-white/90">
-                              You
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="mt-0.5 text-xs text-white/50">
-                          Today:{" "}
-                          <span className="font-semibold text-white/80">
-                            {formatDuration(entry.today_seconds)}
-                          </span>
-                        </p>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="text-xs text-white/50">This week</p>
-                        <p className="font-mono text-xl font-bold">
+                    <div className="flex flex-wrap items-center gap-3 sm:gap-5">
+                      {/* Daily study time */}
+                      <div
+                        className={`rounded-xl border px-3.5 py-2 text-right transition ${
+                          leaderboardPeriod === "today"
+                            ? "border-white/25 bg-white/10"
+                            : "border-white/10 bg-black/30"
+                        }`}
+                      >
+                        <p className="text-[11px] uppercase tracking-wide text-white/50">
+                          Today
+                        </p>
+                        <p className="font-mono text-lg font-bold sm:text-xl">
+                          {formatDuration(entry.today_seconds)}
+                        </p>
+                      </div>
+
+                      {/* Weekly study time */}
+                      <div
+                        className={`rounded-xl border px-3.5 py-2 text-right transition ${
+                          leaderboardPeriod === "week"
+                            ? "border-white/25 bg-white/10"
+                            : "border-white/10 bg-black/30"
+                        }`}
+                      >
+                        <p className="text-[11px] uppercase tracking-wide text-white/50">
+                          This week
+                        </p>
+                        <p className="font-mono text-lg font-bold sm:text-xl">
                           {formatDuration(entry.week_seconds)}
                         </p>
                       </div>
@@ -808,14 +895,16 @@ export default function FriendsPage() {
                     />
                   </div>
 
-                  {/* Subjects studied this week */}
+                  {/* Subjects studied in selected period */}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {entry.top_subjects.length === 0 ? (
+                    {activeSubjects.length === 0 ? (
                       <span className="text-xs text-white/40">
-                        No sessions logged yet this week
+                        {leaderboardPeriod === "today"
+                          ? "No sessions logged yet today"
+                          : "No sessions logged yet this week"}
                       </span>
                     ) : (
-                      entry.top_subjects.map((item) => (
+                      activeSubjects.map((item) => (
                         <span
                           key={item.subject}
                           className="rounded-lg border border-white/10 bg-black/40 px-2.5 py-1 text-xs text-white/80"
@@ -834,10 +923,10 @@ export default function FriendsPage() {
           )}
         </div>
 
-        {leaderboard.length === 1 && (
+        {sortedLeaderboard.length === 1 && (
           <p className="mt-4 text-center text-sm text-white/50">
             Search for a friend&apos;s @username above to add them to your
-            weekly leaderboard!
+            leaderboard!
           </p>
         )}
       </section>
