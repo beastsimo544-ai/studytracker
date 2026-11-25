@@ -270,6 +270,16 @@ export default function Navbar() {
                   >
                     Friends
                   </Link>
+                  <Link
+                    href="/settings"
+                    className={
+                      isActive("/settings")
+                        ? "font-semibold text-white"
+                        : "text-white/70 transition hover:text-white"
+                    }
+                  >
+                    Settings
+                  </Link>
                 </>
               )}
 
@@ -299,15 +309,40 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* Mobile top right action (Logout when signed in) */}
-            <div className="flex items-center md:hidden">
+            {/* Mobile top right actions (Settings + Logout when signed in) */}
+            <div className="flex items-center gap-2 md:hidden">
               {isLoggedIn && (
-                <button
-                  onClick={handleLogout}
-                  className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/80 active:bg-white/10"
-                >
-                  Logout
-                </button>
+                <>
+                  <Link
+                    href="/settings"
+                    aria-label="Account Settings"
+                    className={`rounded-lg border px-2.5 py-1.5 transition ${
+                      isActive("/settings")
+                        ? "border-white/40 bg-white/15 text-white"
+                        : "border-white/15 text-white/75 active:bg-white/10"
+                    }`}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-4 w-4"
+                    >
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                  </Link>
+
+                  <button
+                    onClick={handleLogout}
+                    className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/80 active:bg-white/10"
+                  >
+                    Logout
+                  </button>
+                </>
               )}
             </div>
           </div>

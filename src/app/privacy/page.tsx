@@ -48,14 +48,14 @@ export default function PrivacyPolicyPage() {
 
         <section>
           <h2 className="text-lg font-semibold text-white">
-            4. Security & Data Deletion
+            4. Security & Account Deletion
           </h2>
           <p className="mt-2">
             All data is transmitted over HTTPS and protected by Supabase Row
             Level Security (RLS). You can delete individual study sessions,
-            subjects, and friendships directly inside the app at any time. To
-            request full account deletion, delete your saved sessions/subjects
-            in the app or contact support via our repository page.
+            subjects, and friendships at any time, or permanently delete your
+            entire account and all associated data directly inside the app under{" "}
+            <strong>Account Settings → Delete Account</strong>.
           </p>
         </section>
       </div>

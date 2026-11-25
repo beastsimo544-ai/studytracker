@@ -8,6 +8,8 @@ type ProfileRow = {
   user_id: string;
   username: string | null;
   daily_goal_minutes?: number | null;
+  studying_subject?: string | null;
+  studying_started_at?: string | null;
 };
 
 type FriendshipRow = {
@@ -29,11 +31,45 @@ type LeaderboardEntry = {
   is_self: boolean;
   today_seconds: number;
   week_seconds: number;
+  current_streak: number;
+  studying_subject: string | null;
+  studying_started_at: string | null;
   today_subjects: SubjectSummary[];
   week_subjects: SubjectSummary[];
 };
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,24}$/;
+const MAX_LIVE_SESSION_MS = 6 * 60 * 60 * 1000; // Hide stale live status older than 6h
+
+function toLocalDateKey(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function computeCurrentStreak(sessionDates: string[]) {
+  if (sessionDates.length === 0) return 0;
+
+  const studiedKeys = new Set(
+    sessionDates.map((iso) => toLocalDateKey(new Date(iso)))
+  );
+
+  const checkDate = new Date();
+  checkDate.setHours(0, 0, 0, 0);
+
+  if (!studiedKeys.has(toLocalDateKey(checkDate))) {
+    checkDate.setDate(checkDate.getDate() - 1);
+  }
+
+  let streak = 0;
+  while (studiedKeys.has(toLocalDateKey(checkDate))) {
+    streak += 1;
+    checkDate.setDate(checkDate.getDate() - 1);
+  }
+
+  return streak;
+}
 
 function getTimeBoundaries() {
   const now = new Date();
@@ -47,14 +83,18 @@ function getTimeBoundaries() {
   weekStart.setDate(now.getDate() - daysSinceMonday);
   weekStart.setHours(0, 0, 0, 0);
 
+  const streakWindowStart = new Date(todayStart);
+  streakWindowStart.setDate(todayStart.getDate() - 120);
+
   return {
     todayStart,
     weekStart,
+    streakWindowStart,
   };
 }
 
 function formatDuration(totalSeconds: number) {
-  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+  const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
   const hours = Math.floor(safeSeconds / 3600);
   const minutes = Math.floor((safeSeconds % 3600) / 60);
 
@@ -67,6 +107,20 @@ function formatDuration(totalSeconds: number) {
   }
 
   return `${safeSeconds}s`;
+}
+
+function formatLiveElapsed(startedAtIso: string, nowMs: number) {
+  const startMs = new Date(startedAtIso).getTime();
+  if (Number.isNaN(startMs)) return "";
+  const elapsedSec = Math.max(0, Math.floor((nowMs - startMs) / 1000));
+  const hours = Math.floor(elapsedSec / 3600);
+  const minutes = Math.floor((elapsedSec % 3600) / 60);
+  const secs = elapsedSec % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  }
+  return `${minutes}m ${String(secs).padStart(2, "0")}s`;
 }
 
 export default function FriendsPage() {
@@ -93,33 +147,61 @@ export default function FriendsPage() {
   const [leaderboardPeriod, setLeaderboardPeriod] = useState<"today" | "week">(
     "week"
   );
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const [isLoading, setIsLoading] = useState(true);
   const [setupRequired, setSetupRequired] = useState(false);
 
   const loadFriendsData = useCallback(async (userId: string) => {
-    const { todayStart, weekStart } = getTimeBoundaries();
+    const { todayStart, weekStart, streakWindowStart } = getTimeBoundaries();
 
-    // 1. Load current user's profile
-    const { data: myProfile, error: profileError } = await supabase
+    // 1. Load current user's profile (with graceful fallback if live-status columns aren't added yet)
+    let myProfile: ProfileRow | null = null;
+
+    const fullProfileRes = await supabase
       .from("profiles")
-      .select("user_id, username, daily_goal_minutes")
+      .select(
+        "user_id, username, daily_goal_minutes, studying_subject, studying_started_at"
+      )
       .eq("user_id", userId)
       .maybeSingle();
 
-    let resolvedMyUsername: string | null = null;
+    if (fullProfileRes.error) {
+      if (fullProfileRes.error.message.includes("studying_")) {
+        const basicProfileRes = await supabase
+          .from("profiles")
+          .select("user_id, username, daily_goal_minutes")
+          .eq("user_id", userId)
+          .maybeSingle();
 
-    if (profileError) {
-      if (
-        profileError.message.includes("username") ||
-        profileError.code === "42703"
+        if (basicProfileRes.error) {
+          if (
+            basicProfileRes.error.message.includes("username") ||
+            basicProfileRes.error.code === "42703"
+          ) {
+            setSetupRequired(true);
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          myProfile = basicProfileRes.data as ProfileRow | null;
+        }
+      } else if (
+        fullProfileRes.error.message.includes("username") ||
+        fullProfileRes.error.code === "42703"
       ) {
         setSetupRequired(true);
         setIsLoading(false);
         return;
+      } else {
+        console.error("Profile fetch error:", fullProfileRes.error);
       }
-      console.error("Profile fetch error:", profileError);
-    } else if (myProfile) {
+    } else {
+      myProfile = fullProfileRes.data as ProfileRow | null;
+    }
+
+    let resolvedMyUsername: string | null = null;
+    if (myProfile) {
       resolvedMyUsername = myProfile.username ?? null;
       setMyUsername(resolvedMyUsername);
       setUsernameInput(resolvedMyUsername ?? "");
@@ -150,7 +232,7 @@ export default function FriendsPage() {
     const typedFriendships = (friendshipRows || []) as FriendshipRow[];
     setFriendships(typedFriendships);
 
-    // Fetch usernames for everyone involved in friendships
+    // Fetch usernames + live status for everyone involved in friendships
     const otherUserIds = Array.from(
       new Set(
         typedFriendships.map((f) =>
@@ -160,25 +242,53 @@ export default function FriendsPage() {
     );
 
     const usernameMap: Record<string, string> = {};
+    const liveStatusMap: Record<
+      string,
+      { subject: string | null; startedAt: string | null }
+    > = {};
+
+    if (myProfile) {
+      liveStatusMap[userId] = {
+        subject: myProfile.studying_subject ?? null,
+        startedAt: myProfile.studying_started_at ?? null,
+      };
+    }
 
     if (otherUserIds.length > 0) {
-      const { data: relatedProfiles } = await supabase
+      const fullRelatedRes = await supabase
         .from("profiles")
-        .select("user_id, username")
+        .select("user_id, username, studying_subject, studying_started_at")
         .in("user_id", otherUserIds);
 
-      if (relatedProfiles) {
-        relatedProfiles.forEach((p) => {
-          if (p.username) {
-            usernameMap[p.user_id] = p.username;
-          }
-        });
+      let relatedProfiles: ProfileRow[] | null = null;
+
+      if (
+        fullRelatedRes.error &&
+        fullRelatedRes.error.message.includes("studying_")
+      ) {
+        const basicRelatedRes = await supabase
+          .from("profiles")
+          .select("user_id, username")
+          .in("user_id", otherUserIds);
+        relatedProfiles = (basicRelatedRes.data || []) as ProfileRow[];
+      } else {
+        relatedProfiles = (fullRelatedRes.data || []) as ProfileRow[];
       }
+
+      relatedProfiles.forEach((p) => {
+        if (p.username) {
+          usernameMap[p.user_id] = p.username;
+        }
+        liveStatusMap[p.user_id] = {
+          subject: p.studying_subject ?? null,
+          startedAt: p.studying_started_at ?? null,
+        };
+      });
     }
 
     setUsernamesById(usernameMap);
 
-    // 3. Build weekly leaderboard for you + accepted friends
+    // 3. Build daily/weekly leaderboard + streaks for you + accepted friends
     const acceptedFriendIds = typedFriendships
       .filter((f) => f.status === "accepted")
       .map((f) =>
@@ -186,22 +296,22 @@ export default function FriendsPage() {
       );
 
     const circleIds = Array.from(new Set([userId, ...acceptedFriendIds]));
-    const earliestDate = todayStart < weekStart ? todayStart : weekStart;
 
     const { data: sessionRows, error: sessionsError } = await supabase
       .from("study_sessions")
       .select("user_id, subject, duration, created_at")
       .in("user_id", circleIds)
-      .gte("created_at", earliestDate.toISOString());
+      .gte("created_at", streakWindowStart.toISOString());
 
     if (sessionsError) {
       console.error("Leaderboard sessions error:", sessionsError);
     }
 
     const allSessions = sessionRows || [];
+    const currentTimestamp = Date.now();
 
-    const computedLeaderboard: LeaderboardEntry[] = circleIds
-      .map((memberId) => {
+    const computedLeaderboard: LeaderboardEntry[] = circleIds.map(
+      (memberId) => {
         const memberSessions = allSessions.filter(
           (s) => s.user_id === memberId
         );
@@ -241,6 +351,26 @@ export default function FriendsPage() {
           .sort((a, b) => b.seconds - a.seconds)
           .slice(0, 3);
 
+        const currentStreak = computeCurrentStreak(
+          memberSessions.map((s) => s.created_at)
+        );
+
+        const rawLive = liveStatusMap[memberId];
+        let activeStudyingSubject: string | null = null;
+        let activeStudyingStartedAt: string | null = null;
+
+        if (rawLive?.subject && rawLive?.startedAt) {
+          const startedMs = new Date(rawLive.startedAt).getTime();
+          if (
+            !Number.isNaN(startedMs) &&
+            currentTimestamp - startedMs >= -60000 &&
+            currentTimestamp - startedMs < MAX_LIVE_SESSION_MS
+          ) {
+            activeStudyingSubject = rawLive.subject;
+            activeStudyingStartedAt = rawLive.startedAt;
+          }
+        }
+
         const displayUsername =
           memberId === userId
             ? resolvedMyUsername || "you"
@@ -252,23 +382,24 @@ export default function FriendsPage() {
           is_self: memberId === userId,
           today_seconds: todaySeconds,
           week_seconds: weekSeconds,
+          current_streak: currentStreak,
+          studying_subject: activeStudyingSubject,
+          studying_started_at: activeStudyingStartedAt,
           today_subjects: todaySubjects,
           week_subjects: weekSubjects,
         };
-      })
-      .sort(
-        (a, b) =>
-          b.week_seconds - a.week_seconds ||
-          b.today_seconds - a.today_seconds ||
-          a.username.localeCompare(b.username)
-      );
+      }
+    );
 
     setLeaderboard(computedLeaderboard);
+    setNowMs(currentTimestamp);
     setSetupRequired(false);
     setIsLoading(false);
   }, []);
 
   useEffect(() => {
+    let activeUserId: string | null = null;
+
     const init = async () => {
       const {
         data: { user },
@@ -279,12 +410,53 @@ export default function FriendsPage() {
         return;
       }
 
+      activeUserId = user.id;
       setCurrentUserId(user.id);
       await loadFriendsData(user.id);
     };
 
     init();
+
+    // Poll every 25s + subscribe to profile changes so Live "Studying Now" stays fresh
+    const pollInterval = setInterval(() => {
+      if (activeUserId) {
+        loadFriendsData(activeUserId);
+      }
+    }, 25000);
+
+    const channel = supabase
+      .channel("friends-live-profiles")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles" },
+        () => {
+          if (activeUserId) {
+            loadFriendsData(activeUserId);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(pollInterval);
+      supabase.removeChannel(channel);
+    };
   }, [router, loadFriendsData]);
+
+  // Tick live elapsed counter every second when anyone on the leaderboard is studying right now
+  const hasAnyoneStudyingLive = leaderboard.some((e) =>
+    Boolean(e.studying_subject && e.studying_started_at)
+  );
+
+  useEffect(() => {
+    if (!hasAnyoneStudyingLive) return;
+
+    const tickInterval = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => clearInterval(tickInterval);
+  }, [hasAnyoneStudyingLive]);
 
   const handleSaveUsername = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -482,11 +654,11 @@ export default function FriendsPage() {
             One-time Supabase SQL setup required
           </h2>
           <p className="mt-2 text-sm text-white/80">
-            To enable usernames, friend requests, and the weekly study
-            leaderboard, open your{" "}
-            <strong>Supabase Dashboard → SQL Editor</strong>, paste the contents
-            of <code>supabase-friends-setup.sql</code> from your project folder,
-            and click <strong>Run</strong>. Then refresh this page.
+            To enable usernames, friend requests, and the study leaderboard,
+            open your <strong>Supabase Dashboard → SQL Editor</strong>, paste
+            the contents of <code>supabase-friends-setup.sql</code> from your
+            project folder, and click <strong>Run</strong>. Then refresh this
+            page.
           </p>
         </div>
       </main>
@@ -498,8 +670,8 @@ export default function FriendsPage() {
       <div>
         <h1 className="text-3xl font-bold">Friends</h1>
         <p className="mt-2 text-white/60">
-          Add friends by username and see what and how much everyone is studying
-          today and this week.
+          Add friends by username, see who is studying live, and compare daily
+          and weekly progress.
         </p>
       </div>
 
@@ -810,6 +982,9 @@ export default function FriendsPage() {
               const relation = !entry.is_self
                 ? findRelationship(entry.user_id)
                 : undefined;
+              const isStudyingNow = Boolean(
+                entry.studying_subject && entry.studying_started_at
+              );
 
               return (
                 <div
@@ -826,14 +1001,38 @@ export default function FriendsPage() {
                         {medal}
                       </span>
 
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-lg font-bold">
-                          @{entry.username}
-                        </span>
-                        {entry.is_self && (
-                          <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-medium text-white/90">
-                            You
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-lg font-bold">
+                            @{entry.username}
                           </span>
+                          {entry.is_self && (
+                            <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-medium text-white/90">
+                              You
+                            </span>
+                          )}
+                          {entry.current_streak > 0 && (
+                            <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2.5 py-0.5 text-xs font-semibold text-orange-300">
+                              🔥 {entry.current_streak}d
+                            </span>
+                          )}
+                        </div>
+
+                        {isStudyingNow && entry.studying_started_at && (
+                          <div className="mt-1.5 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-300">
+                            <span className="relative flex h-2 w-2">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                            </span>
+                            <span>
+                              Studying <strong>{entry.studying_subject}</strong>{" "}
+                              ·{" "}
+                              {formatLiveElapsed(
+                                entry.studying_started_at,
+                                nowMs
+                              )}
+                            </span>
+                          </div>
                         )}
                       </div>
                     </div>
