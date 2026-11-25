@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import UserAvatar from "@/components/user-avatar";
+import { evaluateAchievements, type Achievement } from "@/lib/achievements";
 import { notifyAvatarUpdated, resizeAvatarFile } from "@/lib/avatar";
 import { supabase } from "@/lib/supabase";
 
@@ -36,6 +37,7 @@ type LeaderboardEntry = {
   today_seconds: number;
   week_seconds: number;
   current_streak: number;
+  unlocked_badges: Achievement[];
   studying_subject: string | null;
   studying_started_at: string | null;
   today_subjects: SubjectSummary[];
@@ -164,7 +166,7 @@ export default function FriendsPage() {
   const [setupRequired, setSetupRequired] = useState(false);
 
   const loadFriendsData = useCallback(async (userId: string) => {
-    const { todayStart, weekStart, streakWindowStart } = getTimeBoundaries();
+    const { todayStart, weekStart } = getTimeBoundaries();
 
     // 1. Load current user's profile with graceful column fallbacks
     let myProfile: ProfileRow | null = null;
@@ -344,8 +346,7 @@ export default function FriendsPage() {
     const { data: sessionRows, error: sessionsError } = await supabase
       .from("study_sessions")
       .select("user_id, subject, duration, created_at")
-      .in("user_id", circleIds)
-      .gte("created_at", streakWindowStart.toISOString());
+      .in("user_id", circleIds);
 
     if (sessionsError) {
       console.error("Leaderboard sessions error:", sessionsError);
@@ -399,6 +400,10 @@ export default function FriendsPage() {
           memberSessions.map((s) => s.created_at)
         );
 
+        const unlockedBadges = evaluateAchievements(memberSessions).filter(
+          (b) => b.unlocked
+        );
+
         const rawLive = liveStatusMap[memberId];
         let activeStudyingSubject: string | null = null;
         let activeStudyingStartedAt: string | null = null;
@@ -428,6 +433,7 @@ export default function FriendsPage() {
           today_seconds: todaySeconds,
           week_seconds: weekSeconds,
           current_streak: currentStreak,
+          unlocked_badges: unlockedBadges,
           studying_subject: activeStudyingSubject,
           studying_started_at: activeStudyingStartedAt,
           today_subjects: todaySubjects,
@@ -1186,6 +1192,18 @@ export default function FriendsPage() {
                           {entry.current_streak > 0 && (
                             <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2.5 py-0.5 text-xs font-semibold text-orange-300">
                               🔥 {entry.current_streak}d
+                            </span>
+                          )}
+                          {entry.unlocked_badges.length > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-xs">
+                              {entry.unlocked_badges.map((b) => (
+                                <span
+                                  key={b.id}
+                                  title={`${b.title} — ${b.description}`}
+                                >
+                                  {b.icon}
+                                </span>
+                              ))}
                             </span>
                           )}
                         </div>

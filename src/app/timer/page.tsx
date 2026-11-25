@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { resolveSubjectColor } from "@/lib/subject-colors";
 import { supabase } from "@/lib/supabase";
 
 type TimerMode = "stopwatch" | "pomodoro";
@@ -19,7 +20,7 @@ function playCompletionChime() {
     if (!AudioCtx) return;
 
     const ctx = new AudioCtx();
-    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+    const notes = [523.25, 659.25, 783.99, 1046.5];
 
     notes.forEach((freq, index) => {
       const osc = ctx.createOscillator();
@@ -48,6 +49,29 @@ function playCompletionChime() {
   }
 }
 
+async function insertSessionWithOptionalNote(payload: {
+  user_id: string;
+  subject: string;
+  duration: number;
+  note: string | null;
+}) {
+  if (payload.note) {
+    const withNote = await supabase.from("study_sessions").insert(payload);
+    if (!withNote.error) return { error: null };
+    if (!withNote.error.message.includes("note")) {
+      return { error: withNote.error };
+    }
+  }
+
+  const withoutNote = await supabase.from("study_sessions").insert({
+    user_id: payload.user_id,
+    subject: payload.subject,
+    duration: payload.duration,
+  });
+
+  return { error: withoutNote.error };
+}
+
 export default function TimerPage() {
   const router = useRouter();
 
@@ -58,12 +82,17 @@ export default function TimerPage() {
   const [preset, setPreset] = useState<"25-5" | "50-10" | "custom">("25-5");
   const [completedPomodoros, setCompletedPomodoros] = useState(0);
   const [statusBanner, setStatusBanner] = useState("");
+  const [sessionNote, setSessionNote] = useState("");
+  const [isMinimalFocus, setIsMinimalFocus] = useState(false);
 
   const [accumulatedMs, setAccumulatedMs] = useState(0);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [selectedSubject, setSelectedSubject] = useState("");
   const [subjects, setSubjects] = useState<string[]>([]);
+  const [colorBySubject, setColorBySubject] = useState<
+    Record<string, string | null>
+  >({});
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -87,7 +116,10 @@ export default function TimerPage() {
       ? Math.min(100, (seconds / targetPomodoroSeconds) * 100)
       : 0;
 
-  // Broadcast live "Studying Now" status to public.profiles for Friends page
+  const selectedColor = selectedSubject
+    ? resolveSubjectColor(selectedSubject, colorBySubject)
+    : "#ffffff";
+
   const broadcastLiveStatus = useCallback(
     async (activeSubject: string | null, sessionStartMs?: number) => {
       try {
@@ -108,13 +140,13 @@ export default function TimerPage() {
           })
           .eq("user_id", user.id);
       } catch {
-        // Optional columns may not exist yet before running SQL migration
+        // Optional columns may not exist yet
       }
     },
     []
   );
 
-  // Keep phone/laptop screen awake while the timer is actively running
+  // Keep screen awake while running
   useEffect(() => {
     if (!isRunning) return;
     if (typeof navigator === "undefined" || !("wakeLock" in navigator)) return;
@@ -131,7 +163,7 @@ export default function TimerPage() {
           wakeLockSentinel = sentinel;
         }
       } catch {
-        // Ignore if battery saver or background state rejects wakeLock
+        // Ignore if rejected
       }
     };
 
@@ -196,6 +228,9 @@ export default function TimerPage() {
           if (typeof parsedTimer.completedPomodoros === "number") {
             setCompletedPomodoros(parsedTimer.completedPomodoros);
           }
+          if (typeof parsedTimer.sessionNote === "string") {
+            setSessionNote(parsedTimer.sessionNote);
+          }
 
           if (typeof parsedTimer.accumulatedMs === "number") {
             const restoredAcc = Math.max(0, parsedTimer.accumulatedMs);
@@ -252,18 +287,40 @@ export default function TimerPage() {
         return;
       }
 
-      const { data, error } = await supabase
+      const fullRes = await supabase
         .from("subjects")
-        .select("name")
+        .select("name, color")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
 
-      if (error) {
-        console.error(error);
+      let subjectRows: { name: string; color?: string | null }[] = [];
+
+      if (fullRes.error && fullRes.error.message.includes("color")) {
+        const fallbackRes = await supabase
+          .from("subjects")
+          .select("name")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true });
+
+        if (fallbackRes.error) {
+          console.error(fallbackRes.error);
+          return;
+        }
+        subjectRows = fallbackRes.data || [];
+      } else if (fullRes.error) {
+        console.error(fullRes.error);
         return;
+      } else {
+        subjectRows = fullRes.data || [];
       }
 
-      const subjectNames = (data || []).map((subject) => subject.name);
+      const colors: Record<string, string | null> = {};
+      subjectRows.forEach((row) => {
+        colors[row.name] = row.color ?? null;
+      });
+      setColorBySubject(colors);
+
+      const subjectNames = subjectRows.map((subject) => subject.name);
 
       if (
         hasSavedProgress &&
@@ -290,14 +347,15 @@ export default function TimerPage() {
     initTimerAndSubjects();
   }, []);
 
-  // Save active/paused timer state using wall-clock timestamps
+  // Save active/paused timer state
   useEffect(() => {
     if (!hasHydrated) return;
 
     if (
       accumulatedMs === 0 &&
       startedAt === null &&
-      timerMode === "stopwatch"
+      timerMode === "stopwatch" &&
+      !sessionNote.trim()
     ) {
       localStorage.removeItem("studyTimer");
       return;
@@ -316,6 +374,7 @@ export default function TimerPage() {
         breakMinutes,
         preset,
         completedPomodoros,
+        sessionNote,
         accumulatedMs,
         startedAt,
         isRunning: startedAt !== null,
@@ -330,13 +389,13 @@ export default function TimerPage() {
     breakMinutes,
     preset,
     completedPomodoros,
+    sessionNote,
     accumulatedMs,
     startedAt,
     selectedSubject,
     hasHydrated,
   ]);
 
-  // Handle Pomodoro block completion
   const completePomodoroBlock = useCallback(
     async (completedDurationSeconds: number) => {
       if (autoCompletingRef.current) return;
@@ -357,13 +416,16 @@ export default function TimerPage() {
         } = await supabase.auth.getUser();
 
         if (user && selectedSubject && completedDurationSeconds > 0) {
-          const { error } = await supabase.from("study_sessions").insert({
+          const cleanedNote = sessionNote.trim() || null;
+          const { error } = await insertSessionWithOptionalNote({
             subject: selectedSubject,
             duration: completedDurationSeconds,
             user_id: user.id,
+            note: cleanedNote,
           });
 
           if (!error) {
+            setSessionNote("");
             setStatusBanner(
               `Focus block complete (${focusMinutes}m saved)! Time for a ${breakMinutes}m break.`
             );
@@ -387,13 +449,13 @@ export default function TimerPage() {
     [
       pomodoroPhase,
       selectedSubject,
+      sessionNote,
       focusMinutes,
       breakMinutes,
       broadcastLiveStatus,
     ]
   );
 
-  // Update displayed seconds from wall-clock elapsed time
   useEffect(() => {
     if (startedAt === null) return;
 
@@ -424,7 +486,6 @@ export default function TimerPage() {
     completePomodoroBlock,
   ]);
 
-  // Warn user before closing tab with an unsaved focus session
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       const isFocusProgress =
@@ -460,7 +521,11 @@ export default function TimerPage() {
   };
 
   const startTimer = () => {
-    if (pomodoroPhase === "focus" && !selectedSubject && timerMode === "pomodoro")
+    if (
+      pomodoroPhase === "focus" &&
+      !selectedSubject &&
+      timerMode === "pomodoro"
+    )
       return;
     if (timerMode === "stopwatch" && !selectedSubject) return;
 
@@ -551,10 +616,12 @@ export default function TimerPage() {
         return;
       }
 
-      const { error } = await supabase.from("study_sessions").insert({
+      const cleanedNote = sessionNote.trim() || null;
+      const { error } = await insertSessionWithOptionalNote({
         subject: selectedSubject,
         duration: finalSeconds,
         user_id: user.id,
+        note: cleanedNote,
       });
 
       if (error) {
@@ -568,6 +635,7 @@ export default function TimerPage() {
       setStartedAt(null);
       setAccumulatedMs(0);
       setSeconds(0);
+      setSessionNote("");
       if (timerMode === "stopwatch") {
         localStorage.removeItem("studyTimer");
       }
@@ -579,7 +647,6 @@ export default function TimerPage() {
     }
   };
 
-  // Browser tab title
   useEffect(() => {
     const label =
       timerMode === "pomodoro" && pomodoroPhase === "break"
@@ -598,9 +665,122 @@ export default function TimerPage() {
       document.title = "StudyTracker";
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displaySeconds, seconds, isRunning, selectedSubject, timerMode, pomodoroPhase]);
+  }, [
+    displaySeconds,
+    seconds,
+    isRunning,
+    selectedSubject,
+    timerMode,
+    pomodoroPhase,
+  ]);
+
+  useEffect(() => {
+    if (!isMinimalFocus) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsMinimalFocus(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isMinimalFocus]);
+
+  const enterMinimalFocus = () => {
+    if (timerMode === "pomodoro" && pomodoroPhase === "break") {
+      setStartedAt(null);
+      setAccumulatedMs(0);
+      setSeconds(0);
+    }
+    setTimerMode("stopwatch");
+    setPomodoroPhase("focus");
+    setStatusBanner("");
+    setIsMinimalFocus(true);
+  };
 
   const isBreakPhase = timerMode === "pomodoro" && pomodoroPhase === "break";
+
+  // Distraction-free Minimal Focus Mode (normal timer only, all extras hidden)
+  if (isMinimalFocus) {
+    return (
+      <main className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0a0a0a] px-6">
+        <button
+          type="button"
+          onClick={() => setIsMinimalFocus(false)}
+          className="fixed right-6 top-6 rounded-xl border border-white/15 px-4 py-2 text-xs font-medium text-white/60 transition hover:border-white/30 hover:text-white"
+        >
+          Exit Focus
+        </button>
+
+        <div className="w-full max-w-xl text-center">
+          {hasSessionProgress ? (
+            <p className="text-sm font-medium tracking-wide text-white/50">
+              {selectedSubject || "Study"}
+            </p>
+          ) : (
+            <div className="mx-auto max-w-xs">
+              <select
+                value={selectedSubject}
+                onChange={(e) => setSelectedSubject(e.target.value)}
+                disabled={subjects.length === 0}
+                aria-label="Subject"
+                className="w-full rounded-xl border border-white/10 bg-black px-4 py-2.5 text-center text-sm text-white/85 outline-none disabled:opacity-50"
+              >
+                {subjects.length === 0 ? (
+                  <option value="">No subjects yet</option>
+                ) : (
+                  subjects.map((subject) => (
+                    <option key={subject} value={subject}>
+                      {subject}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+          )}
+
+          <p className="my-14 font-mono text-6xl font-bold tracking-wider sm:text-8xl">
+            {formatTime(seconds)}
+          </p>
+
+          <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
+            {!isRunning ? (
+              <button
+                onClick={startTimer}
+                disabled={!selectedSubject}
+                className="rounded-xl bg-white px-8 py-3 font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {seconds > 0 ? "Resume" : "Start"}
+              </button>
+            ) : (
+              <button
+                onClick={pauseTimer}
+                className="rounded-xl bg-white px-8 py-3 font-semibold text-black transition hover:bg-white/90"
+              >
+                Pause
+              </button>
+            )}
+
+            <button
+              onClick={resetTimer}
+              className="rounded-xl border border-white/20 px-8 py-3 font-semibold transition hover:bg-white/5"
+            >
+              Reset
+            </button>
+
+            <button
+              onClick={finishSession}
+              disabled={seconds === 0 || !selectedSubject || isSaving}
+              className="rounded-xl border border-white/20 px-8 py-3 font-semibold transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              {isSaving ? "Saving..." : "Finish Session"}
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-10">
@@ -612,39 +792,48 @@ export default function TimerPage() {
           </p>
         </div>
 
-        {/* Stopwatch / Pomodoro Switcher */}
-        <div className="inline-flex rounded-xl border border-white/10 bg-white/5 p-1">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
-            disabled={hasSessionProgress}
-            onClick={() => {
-              setTimerMode("stopwatch");
-              setStatusBanner("");
-            }}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
-              timerMode === "stopwatch"
-                ? "bg-white text-black"
-                : "text-white/65 hover:text-white"
-            }`}
+            onClick={enterMinimalFocus}
+            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/80 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
           >
-            Stopwatch
+            Focus Mode
           </button>
-          <button
-            type="button"
-            disabled={hasSessionProgress}
-            onClick={() => {
-              setTimerMode("pomodoro");
-              setPomodoroPhase("focus");
-              setStatusBanner("");
-            }}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
-              timerMode === "pomodoro"
-                ? "bg-white text-black"
-                : "text-white/65 hover:text-white"
-            }`}
-          >
-            Pomodoro
-          </button>
+
+          <div className="inline-flex rounded-xl border border-white/10 bg-white/5 p-1">
+            <button
+              type="button"
+              disabled={hasSessionProgress}
+              onClick={() => {
+                setTimerMode("stopwatch");
+                setStatusBanner("");
+              }}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                timerMode === "stopwatch"
+                  ? "bg-white text-black"
+                  : "text-white/65 hover:text-white"
+              }`}
+            >
+              Stopwatch
+            </button>
+            <button
+              type="button"
+              disabled={hasSessionProgress}
+              onClick={() => {
+                setTimerMode("pomodoro");
+                setPomodoroPhase("focus");
+                setStatusBanner("");
+              }}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                timerMode === "pomodoro"
+                  ? "bg-white text-black"
+                  : "text-white/65 hover:text-white"
+              }`}
+            >
+              Pomodoro
+            </button>
+          </div>
         </div>
       </div>
 
@@ -655,7 +844,6 @@ export default function TimerPage() {
       )}
 
       <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6 sm:p-8">
-        {/* Pomodoro controls & phase pills */}
         {timerMode === "pomodoro" && (
           <div className="mb-6 space-y-4 border-b border-white/10 pb-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -762,43 +950,68 @@ export default function TimerPage() {
           </div>
         )}
 
-        {/* Subject Selector */}
+        {/* Subject + Session Note */}
         {!isBreakPhase && (
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-white/60">Subject</label>
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm text-white/60">
+                  {selectedSubject && (
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: selectedColor }}
+                    />
+                  )}
+                  <span>Subject</span>
+                </label>
 
-              {isLoggedIn && subjects.length === 0 && (
-                <Link
-                  href="/subject"
-                  className="text-sm text-white underline hover:text-white/80"
-                >
-                  Add a subject first →
-                </Link>
-              )}
+                {isLoggedIn && subjects.length === 0 && (
+                  <Link
+                    href="/subject"
+                    className="text-sm text-white underline hover:text-white/80"
+                  >
+                    Add a subject first →
+                  </Link>
+                )}
+              </div>
+
+              <select
+                value={selectedSubject}
+                onChange={(e) => setSelectedSubject(e.target.value)}
+                disabled={hasSessionProgress || subjects.length === 0}
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black p-3 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {subjects.length === 0 ? (
+                  <option value="">No subjects yet</option>
+                ) : (
+                  subjects.map((subject) => (
+                    <option key={subject} value={subject}>
+                      {subject}
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
 
-            <select
-              value={selectedSubject}
-              onChange={(e) => setSelectedSubject(e.target.value)}
-              disabled={hasSessionProgress || subjects.length === 0}
-              className="mt-2 w-full rounded-xl border border-white/10 bg-black p-3 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {subjects.length === 0 ? (
-                <option value="">No subjects yet</option>
-              ) : (
-                subjects.map((subject) => (
-                  <option key={subject} value={subject}>
-                    {subject}
-                  </option>
-                ))
-              )}
-            </select>
+            <div>
+              <label className="text-sm text-white/60">
+                Session note{" "}
+                <span className="text-xs text-white/40">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={sessionNote}
+                onChange={(e) => setSessionNote(e.target.value)}
+                maxLength={140}
+                placeholder="What are you working on? (e.g. Chapitre 3 — Exercices)"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black px-4 py-2.5 text-sm outline-none"
+              />
+            </div>
           </div>
         )}
 
         {/* Timer Readout */}
-        <div className="py-14 text-center">
+        <div className="py-12 text-center">
           {isBreakPhase && (
             <p className="mb-3 text-sm font-medium uppercase tracking-widest text-emerald-400">
               Break Time
@@ -812,10 +1025,11 @@ export default function TimerPage() {
           {timerMode === "pomodoro" && (
             <div className="mx-auto mt-6 h-2 max-w-sm overflow-hidden rounded-full bg-white/10">
               <div
-                className={`h-full rounded-full transition-all ${
-                  isBreakPhase ? "bg-emerald-400" : "bg-white"
-                }`}
-                style={{ width: `${pomodoroProgressPercent}%` }}
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${pomodoroProgressPercent}%`,
+                  backgroundColor: isBreakPhase ? "#34d399" : selectedColor,
+                }}
               />
             </div>
           )}

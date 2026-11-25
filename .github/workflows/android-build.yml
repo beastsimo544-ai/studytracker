@@ -1,0 +1,59 @@
+name: Build Android APK & AAB
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Setup Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+          cache: "gradle"
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build static web bundle & sync Capacitor Android
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: npm run mobile:sync
+
+      - name: Build installable Android APK (Debug)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Build Google Play Android App Bundle (AAB)
+        working-directory: android
+        run: ./gradlew bundleRelease
+
+      - name: Upload StudyTracker APK (Install directly on Android phones)
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyTracker-Android-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload StudyTracker AAB (Google Play Store bundle)
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyTracker-GooglePlay-AAB
+          path: android/app/build/outputs/bundle/release/app-release.aab

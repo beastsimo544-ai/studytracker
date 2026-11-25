@@ -172,6 +172,7 @@ export default function SettingsPage() {
 
     try {
       await supabase.from("study_sessions").delete().eq("user_id", userId);
+      await supabase.from("exams").delete().eq("user_id", userId);
       await supabase.from("subjects").delete().eq("user_id", userId);
       await supabase
         .from("friendships")

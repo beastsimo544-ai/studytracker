@@ -2,18 +2,27 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import {
+  SUBJECT_COLOR_OPTIONS,
+  resolveSubjectColor,
+} from "@/lib/subject-colors";
 import { supabase } from "@/lib/supabase";
 
 type Subject = {
   id: number;
   name: string;
+  color?: string | null;
 };
 
 export default function SubjectPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [newSubject, setNewSubject] = useState("");
+  const [newColor, setNewColor] = useState(SUBJECT_COLOR_OPTIONS[0].hex);
   const [editingSubjectId, setEditingSubjectId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [editingColor, setEditingColor] = useState(
+    SUBJECT_COLOR_OPTIONS[0].hex
+  );
   const [isLoading, setIsLoading] = useState(true);
 
   const router = useRouter();
@@ -29,19 +38,37 @@ export default function SubjectPage() {
         return;
       }
 
-      const { data, error } = await supabase
+      const fullRes = await supabase
         .from("subjects")
-        .select("id, name")
+        .select("id, name, color")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
 
-      if (error) {
-        console.error("Fetch subjects failed:", error);
+      if (fullRes.error && fullRes.error.message.includes("color")) {
+        const fallbackRes = await supabase
+          .from("subjects")
+          .select("id, name")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true });
+
+        if (fallbackRes.error) {
+          console.error("Fetch subjects failed:", fallbackRes.error);
+          setIsLoading(false);
+          return;
+        }
+
+        setSubjects((fallbackRes.data || []) as Subject[]);
         setIsLoading(false);
         return;
       }
 
-      setSubjects(data || []);
+      if (fullRes.error) {
+        console.error("Fetch subjects failed:", fullRes.error);
+        setIsLoading(false);
+        return;
+      }
+
+      setSubjects((fullRes.data || []) as Subject[]);
       setIsLoading(false);
     };
 
@@ -54,8 +81,7 @@ export default function SubjectPage() {
     if (!trimmedSubject) return;
 
     const alreadyExists = subjects.some(
-      (subject) =>
-        subject.name.toLowerCase() === trimmedSubject.toLowerCase()
+      (subject) => subject.name.toLowerCase() === trimmedSubject.toLowerCase()
     );
 
     if (alreadyExists) {
@@ -72,22 +98,47 @@ export default function SubjectPage() {
       return;
     }
 
-    const { data, error } = await supabase
+    const fullInsert = await supabase
       .from("subjects")
       .insert({
         name: trimmedSubject,
+        color: newColor,
         user_id: user.id,
       })
-      .select("id, name")
+      .select("id, name, color")
       .single();
 
-    if (error) {
-      console.error("Add subject failed:", error);
+    if (fullInsert.error && fullInsert.error.message.includes("color")) {
+      const fallbackInsert = await supabase
+        .from("subjects")
+        .insert({
+          name: trimmedSubject,
+          user_id: user.id,
+        })
+        .select("id, name")
+        .single();
+
+      if (fallbackInsert.error) {
+        console.error("Add subject failed:", fallbackInsert.error);
+        alert("Could not add subject.");
+        return;
+      }
+
+      setSubjects((previous) => [
+        ...previous,
+        { ...(fallbackInsert.data as Subject), color: newColor },
+      ]);
+      setNewSubject("");
+      return;
+    }
+
+    if (fullInsert.error) {
+      console.error("Add subject failed:", fullInsert.error);
       alert("Could not add subject.");
       return;
     }
 
-    setSubjects((previous) => [...previous, data]);
+    setSubjects((previous) => [...previous, fullInsert.data as Subject]);
     setNewSubject("");
   };
 
@@ -151,11 +202,6 @@ export default function SubjectPage() {
     }
 
     const currentSubject = subjects.find((s) => s.id === subjectId);
-    if (currentSubject && currentSubject.name === trimmedName) {
-      setEditingSubjectId(null);
-      setEditingName("");
-      return;
-    }
 
     const duplicateExists = subjects.some(
       (subject) =>
@@ -177,29 +223,57 @@ export default function SubjectPage() {
       return;
     }
 
-    const { data: updatedRows, error } = await supabase
+    let updatedSubject: Subject | null = null;
+
+    const fullUpdate = await supabase
       .from("subjects")
       .update({
         name: trimmedName,
+        color: editingColor,
       })
       .eq("id", subjectId)
       .eq("user_id", user.id)
-      .select("id, name");
+      .select("id, name, color");
 
-    if (error) {
-      console.error(error);
-      alert("Could not rename subject.");
+    if (fullUpdate.error && fullUpdate.error.message.includes("color")) {
+      const fallbackUpdate = await supabase
+        .from("subjects")
+        .update({
+          name: trimmedName,
+        })
+        .eq("id", subjectId)
+        .eq("user_id", user.id)
+        .select("id, name");
+
+      if (fallbackUpdate.error) {
+        console.error(fallbackUpdate.error);
+        alert("Could not update subject.");
+        return;
+      }
+
+      if (!fallbackUpdate.data || fallbackUpdate.data.length === 0) {
+        alert(
+          "The database did not update this subject. Check that an UPDATE RLS policy is enabled on the subjects table."
+        );
+        return;
+      }
+
+      updatedSubject = {
+        ...(fallbackUpdate.data[0] as Subject),
+        color: editingColor,
+      };
+    } else if (fullUpdate.error) {
+      console.error(fullUpdate.error);
+      alert("Could not update subject.");
       return;
-    }
-
-    if (!updatedRows || updatedRows.length === 0) {
+    } else if (!fullUpdate.data || fullUpdate.data.length === 0) {
       alert(
         "The database did not update this subject. Check that an UPDATE RLS policy is enabled on the subjects table."
       );
       return;
+    } else {
+      updatedSubject = fullUpdate.data[0] as Subject;
     }
-
-    const updatedSubject = updatedRows[0];
 
     // Keep past study sessions and any active timer synced with the new subject name
     if (currentSubject && currentSubject.name !== trimmedName) {
@@ -234,7 +308,7 @@ export default function SubjectPage() {
 
     setSubjects((previous) =>
       previous.map((subject) =>
-        subject.id === subjectId ? updatedSubject : subject
+        subject.id === subjectId && updatedSubject ? updatedSubject : subject
       )
     );
 
@@ -246,34 +320,59 @@ export default function SubjectPage() {
     <main className="mx-auto w-full max-w-4xl px-6 py-10">
       <div>
         <h1 className="text-3xl font-bold">Subjects</h1>
-
         <p className="mt-2 text-white/60">
-          Create and manage the subjects you study.
+          Create and color-code the subjects you study.
         </p>
       </div>
 
-      <div className="mt-10 flex gap-3">
-        <input
-          type="text"
-          value={newSubject}
-          onChange={(e) => setNewSubject(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              addSubject();
-            }
-          }}
-          placeholder="Add a new subject..."
-          className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none"
-        />
+      {/* ADD SUBJECT CARD */}
+      <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-5">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <input
+            type="text"
+            value={newSubject}
+            onChange={(e) => setNewSubject(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                addSubject();
+              }
+            }}
+            placeholder="Add a new subject..."
+            className="flex-1 rounded-xl border border-white/10 bg-black px-4 py-3 outline-none"
+          />
 
-        <button
-          onClick={addSubject}
-          className="rounded-xl bg-white px-6 py-3 font-semibold text-black transition hover:bg-white/90"
-        >
-          Add Subject
-        </button>
+          <button
+            onClick={addSubject}
+            className="rounded-xl bg-white px-6 py-3 font-semibold text-black transition hover:bg-white/90"
+          >
+            Add Subject
+          </button>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2.5">
+          <span className="text-xs text-white/50">Color:</span>
+          {SUBJECT_COLOR_OPTIONS.map((opt) => {
+            const selected = newColor.toLowerCase() === opt.hex.toLowerCase();
+            return (
+              <button
+                key={opt.hex}
+                type="button"
+                title={opt.label}
+                aria-label={`Select ${opt.label} color`}
+                onClick={() => setNewColor(opt.hex)}
+                className={`h-6 w-6 rounded-full transition ${
+                  selected
+                    ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#0a0a0a]"
+                    : "opacity-75 hover:opacity-100"
+                }`}
+                style={{ backgroundColor: opt.hex }}
+              />
+            );
+          })}
+        </div>
       </div>
 
+      {/* SUBJECT LIST */}
       <div className="mt-8 space-y-3">
         {isLoading ? (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
@@ -284,32 +383,65 @@ export default function SubjectPage() {
             <p className="text-white/60">No subjects yet.</p>
           </div>
         ) : (
-          <>
-            {subjects.map((subject) => (
+          subjects.map((subject) => {
+            const activeColor = resolveSubjectColor(subject.name, {
+              [subject.name]: subject.color,
+            });
+
+            return (
               <div
                 key={subject.id}
-                className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 px-5 py-4"
+                className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 {editingSubjectId === subject.id ? (
-                  <input
-                    type="text"
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        saveSubjectEdit(subject.id);
-                      } else if (e.key === "Escape") {
-                        setEditingSubjectId(null);
-                        setEditingName("");
-                      }
-                    }}
-                    className="flex-1 rounded-lg border border-white/10 bg-black px-3 py-2 outline-none"
-                  />
+                  <div className="flex flex-1 flex-col gap-3">
+                    <input
+                      type="text"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          saveSubjectEdit(subject.id);
+                        } else if (e.key === "Escape") {
+                          setEditingSubjectId(null);
+                          setEditingName("");
+                        }
+                      }}
+                      className="w-full rounded-lg border border-white/10 bg-black px-3 py-2 outline-none"
+                    />
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {SUBJECT_COLOR_OPTIONS.map((opt) => {
+                        const selected =
+                          editingColor.toLowerCase() === opt.hex.toLowerCase();
+                        return (
+                          <button
+                            key={opt.hex}
+                            type="button"
+                            title={opt.label}
+                            onClick={() => setEditingColor(opt.hex)}
+                            className={`h-5 w-5 rounded-full transition ${
+                              selected
+                                ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#0a0a0a]"
+                                : "opacity-70 hover:opacity-100"
+                            }`}
+                            style={{ backgroundColor: opt.hex }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
                 ) : (
-                  <span className="font-medium">{subject.name}</span>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="h-3.5 w-3.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: activeColor }}
+                    />
+                    <span className="font-medium">{subject.name}</span>
+                  </div>
                 )}
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 self-end sm:self-auto">
                   {editingSubjectId === subject.id ? (
                     <>
                       <button
@@ -335,6 +467,7 @@ export default function SubjectPage() {
                         onClick={() => {
                           setEditingSubjectId(subject.id);
                           setEditingName(subject.name);
+                          setEditingColor(activeColor);
                         }}
                         className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm text-blue-400"
                       >
@@ -351,8 +484,8 @@ export default function SubjectPage() {
                   )}
                 </div>
               </div>
-            ))}
-          </>
+            );
+          })
         )}
       </div>
     </main>
