@@ -727,10 +727,10 @@ export default function NotificationProvider({
       {toasts.length > 0 && (
         <div
           aria-live="polite"
-          className="pointer-events-none fixed inset-x-4 top-16 z-[60] flex flex-col items-end gap-2.5 md:inset-x-auto md:bottom-6 md:right-6 md:top-auto md:w-96"
+          className="pointer-events-none fixed inset-x-4 top-[calc(env(safe-area-inset-top)+3.75rem)] z-[60] flex flex-col items-end gap-2 md:inset-x-auto md:bottom-6 md:right-6 md:top-auto md:w-96"
         >
           {toasts.map((item) => {
-            let borderClass = "border-white/15 bg-[#121212]/95 text-white";
+            let borderClass = "border-white/12 bg-[#111113]/95 text-white";
             if (item.variant === "success") {
               borderClass =
                 "border-emerald-500/35 bg-[#0d1f18]/95 text-emerald-100";
@@ -743,7 +743,7 @@ export default function NotificationProvider({
 
             const inner = (
               <div
-                className={`pointer-events-auto flex w-full items-start justify-between gap-3 rounded-2xl border px-4 py-3.5 shadow-2xl backdrop-blur-md transition ${borderClass}`}
+                className={`pointer-events-auto flex w-full items-start justify-between gap-3 rounded-xl border px-3.5 py-3 shadow-2xl backdrop-blur-md transition ${borderClass}`}
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold">{item.title}</p>

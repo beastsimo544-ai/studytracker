@@ -48,6 +48,15 @@ export default function SettingsPage() {
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  };
 
   useEffect(() => {
     const loadAccount = async () => {
@@ -332,37 +341,63 @@ export default function SettingsPage() {
 
   if (isLoading) {
     return (
-      <main className="mx-auto w-full max-w-3xl px-6 py-10">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
-          <p className="text-white/60">Loading account settings...</p>
+      <main className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6 sm:py-10">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-6 text-center">
+          <p className="text-sm text-white/55">Loading account settings...</p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-10">
-      <div>
-        <h1 className="text-3xl font-bold">Account Settings</h1>
-        <p className="mt-2 text-white/60">
-          Manage your profile, reminders, notifications, password, and account
-          data.
-        </p>
+    <main className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6 sm:py-10">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            Settings
+          </h1>
+          <p className="mt-1 text-xs text-white/55 sm:text-sm">
+            Profile, study reminders, data export, and account security.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          disabled={isSigningOut}
+          onClick={handleSignOut}
+          className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/15 bg-[#111113] px-3.5 text-xs font-semibold text-white/85 transition hover:border-white/30 hover:text-white disabled:opacity-50"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-3.5 w-3.5"
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          <span>{isSigningOut ? "Signing out..." : "Sign Out"}</span>
+        </button>
       </div>
 
       {/* PROFILE PICTURE & ACCOUNT SUMMARY */}
-      <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
-        <h2 className="text-lg font-semibold">Profile</h2>
+      <section className="mt-5 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
+        <h2 className="text-base font-semibold">Profile</h2>
 
-        <div className="mt-5 flex flex-wrap items-center gap-5 border-b border-white/10 pb-6">
+        <div className="mt-4 flex flex-wrap items-center gap-4 border-b border-white/[0.08] pb-4">
           <UserAvatar
             avatarUrl={avatarUrl}
             name={username || email}
             size="lg"
+            className="!h-14 !w-14 !text-lg"
           />
 
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2.5">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -375,7 +410,7 @@ export default function SettingsPage() {
                 type="button"
                 disabled={isSavingAvatar}
                 onClick={() => fileInputRef.current?.click()}
-                className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+                className="h-9 rounded-xl bg-white px-3.5 text-xs font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
               >
                 {isSavingAvatar
                   ? "Saving..."
@@ -389,15 +424,15 @@ export default function SettingsPage() {
                   type="button"
                   disabled={isSavingAvatar}
                   onClick={() => saveAvatarToDb(null)}
-                  className="rounded-xl border border-white/15 px-4 py-2 text-sm text-white/70 transition hover:text-white disabled:opacity-50"
+                  className="h-9 rounded-xl border border-white/15 px-3.5 text-xs text-white/70 transition hover:text-white disabled:opacity-50"
                 >
                   Remove
                 </button>
               )}
             </div>
 
-            <p className="text-xs text-white/45">
-              PNG, JPG, or WebP · Automatically cropped to a square
+            <p className="text-[11px] text-white/45">
+              PNG, JPG, or WebP · Auto-cropped square
             </p>
 
             {avatarMessage && (
@@ -406,23 +441,25 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="mt-4 space-y-3 text-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
-            <span className="text-white/50">Email</span>
-            <span className="font-medium">{email || "—"}</span>
+        <div className="mt-3.5 space-y-2.5 text-sm">
+          <div className="flex items-center justify-between gap-3 border-b border-white/[0.08] pb-2.5">
+            <span className="shrink-0 text-xs text-white/50">Email</span>
+            <span className="truncate text-xs font-medium sm:text-sm">
+              {email || "—"}
+            </span>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-            <span className="text-white/50">Username</span>
-            <div className="flex items-center gap-3">
-              <span className="font-mono font-medium">
+          <div className="flex items-center justify-between gap-3 pt-0.5">
+            <span className="shrink-0 text-xs text-white/50">Username</span>
+            <div className="flex items-center gap-2.5">
+              <span className="font-mono text-xs font-medium sm:text-sm">
                 {username ? `@${username}` : "Not set"}
               </span>
               <Link
                 href="/friends"
-                className="text-xs text-white/70 underline hover:text-white"
+                className="text-xs text-emerald-400 hover:underline"
               >
-                {username ? "Change" : "Set username"}
+                {username ? "Edit" : "Set"}
               </Link>
             </div>
           </div>
@@ -430,13 +467,13 @@ export default function SettingsPage() {
       </section>
 
       {/* NOTIFICATIONS & REMINDERS */}
-      <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
+      <section className="mt-4 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-4">
           <div>
-            <h2 className="text-lg font-semibold">
-              Notifications & Study Reminders 🔔
+            <h2 className="text-base font-semibold">
+              Notifications &amp; Reminders
             </h2>
-            <p className="mt-1 text-sm text-white/50">
+            <p className="mt-0.5 text-xs text-white/50">
               Device status:{" "}
               <span
                 className={
@@ -462,40 +499,40 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={handleEnableNotifications}
-                  className="rounded-xl bg-white px-4 py-2 text-xs font-semibold text-black transition hover:bg-white/90"
+                  className="h-9 rounded-xl bg-white px-3.5 text-xs font-semibold text-black transition hover:bg-white/90"
                 >
-                  Enable Notifications
+                  Enable
                 </button>
               )}
 
             <button
               type="button"
               onClick={handleTestNotification}
-              className="rounded-xl border border-white/20 px-4 py-2 text-xs font-medium transition hover:bg-white/5"
+              className="h-9 rounded-xl border border-white/15 px-3.5 text-xs font-medium transition hover:bg-white/5"
             >
               Send Test
             </button>
           </div>
         </div>
 
-        <div className="mt-5 space-y-4 text-sm">
+        <div className="mt-4 space-y-3.5 text-sm">
           {/* Daily Reminder */}
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
-            <div>
-              <p className="font-medium">Daily Study Reminder</p>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-3.5">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Daily Study Reminder</p>
               <p className="text-xs text-white/50">
-                Get a daily nudge at your chosen study time.
+                Daily nudge at your preferred study time.
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <input
                 type="time"
                 value={notifPrefs.dailyReminderTime}
                 onChange={(e) =>
                   updatePref({ dailyReminderTime: e.target.value })
                 }
-                className="rounded-xl border border-white/10 bg-black px-3 py-1.5 text-xs outline-none"
+                className="h-8 rounded-lg border border-white/12 bg-[#09090b] px-2.5 text-xs tabular-nums outline-none"
               />
 
               <button
@@ -505,10 +542,10 @@ export default function SettingsPage() {
                     dailyReminderEnabled: !notifPrefs.dailyReminderEnabled,
                   })
                 }
-                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                className={`h-8 min-w-[52px] rounded-full px-3 text-xs font-semibold transition ${
                   notifPrefs.dailyReminderEnabled
                     ? "bg-emerald-400 text-black"
-                    : "border border-white/15 bg-black/40 text-white/60"
+                    : "border border-white/15 bg-[#09090b] text-white/60"
                 }`}
               >
                 {notifPrefs.dailyReminderEnabled ? "On" : "Off"}
@@ -517,12 +554,11 @@ export default function SettingsPage() {
           </div>
 
           {/* Streak-Saver */}
-          <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-            <div>
-              <p className="font-medium">Streak-Saver Alert (20:30) 🔥</p>
+          <div className="flex items-center justify-between gap-3 border-b border-white/[0.08] pb-3.5">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Streak-Saver Alert (20:30)</p>
               <p className="text-xs text-white/50">
-                Evening heads-up if your active study streak hasn&apos;t been
-                extended today.
+                Evening heads-up if your active streak isn&apos;t extended yet.
               </p>
             </div>
 
@@ -533,10 +569,10 @@ export default function SettingsPage() {
                   streakSaverEnabled: !notifPrefs.streakSaverEnabled,
                 })
               }
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+              className={`h-8 min-w-[52px] shrink-0 rounded-full px-3 text-xs font-semibold transition ${
                 notifPrefs.streakSaverEnabled
                   ? "bg-emerald-400 text-black"
-                  : "border border-white/15 bg-black/40 text-white/60"
+                  : "border border-white/15 bg-[#09090b] text-white/60"
               }`}
             >
               {notifPrefs.streakSaverEnabled ? "On" : "Off"}
@@ -544,12 +580,11 @@ export default function SettingsPage() {
           </div>
 
           {/* Exam Reminders */}
-          <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-            <div>
-              <p className="font-medium">Upcoming Exam Reminders 📝</p>
+          <div className="flex items-center justify-between gap-3 border-b border-white/[0.08] pb-3.5">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Upcoming Exam Reminders</p>
               <p className="text-xs text-white/50">
-                Notify the day before (09:00) and morning of (08:00) pinned
-                exams.
+                Alerts the day before (09:00) and morning of (08:00) exams.
               </p>
             </div>
 
@@ -560,10 +595,10 @@ export default function SettingsPage() {
                   examRemindersEnabled: !notifPrefs.examRemindersEnabled,
                 })
               }
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+              className={`h-8 min-w-[52px] shrink-0 rounded-full px-3 text-xs font-semibold transition ${
                 notifPrefs.examRemindersEnabled
                   ? "bg-emerald-400 text-black"
-                  : "border border-white/15 bg-black/40 text-white/60"
+                  : "border border-white/15 bg-[#09090b] text-white/60"
               }`}
             >
               {notifPrefs.examRemindersEnabled ? "On" : "Off"}
@@ -571,11 +606,11 @@ export default function SettingsPage() {
           </div>
 
           {/* Live Friend Activity */}
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="font-medium">Live Friend Study Alerts 🟢</p>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Live Friend Study Alerts</p>
               <p className="text-xs text-white/50">
-                Alert when an accepted friend starts a live study session.
+                Alert when an accepted friend starts studying live.
               </p>
             </div>
 
@@ -586,10 +621,10 @@ export default function SettingsPage() {
                   friendLiveAlertsEnabled: !notifPrefs.friendLiveAlertsEnabled,
                 })
               }
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+              className={`h-8 min-w-[52px] shrink-0 rounded-full px-3 text-xs font-semibold transition ${
                 notifPrefs.friendLiveAlertsEnabled
                   ? "bg-emerald-400 text-black"
-                  : "border border-white/15 bg-black/40 text-white/60"
+                  : "border border-white/15 bg-[#09090b] text-white/60"
               }`}
             >
               {notifPrefs.friendLiveAlertsEnabled ? "On" : "Off"}
@@ -599,14 +634,14 @@ export default function SettingsPage() {
       </section>
 
       {/* CHANGE PASSWORD */}
-      <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
-        <h2 className="text-lg font-semibold">Change Password</h2>
-        <p className="mt-1 text-sm text-white/50">
+      <section className="mt-4 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
+        <h2 className="text-base font-semibold">Change Password</h2>
+        <p className="mt-0.5 text-xs text-white/50">
           Update the password you use to sign in.
         </p>
 
-        <form onSubmit={handleChangePassword} className="mt-4 space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={handleChangePassword} className="mt-3.5 space-y-3.5">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="text-xs text-white/60">New password</label>
               <input
@@ -616,7 +651,7 @@ export default function SettingsPage() {
                 minLength={6}
                 required
                 placeholder="At least 6 characters"
-                className="mt-1.5 w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-sm outline-none"
+                className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none focus:border-white/25"
               />
             </div>
 
@@ -631,7 +666,7 @@ export default function SettingsPage() {
                 minLength={6}
                 required
                 placeholder="Repeat new password"
-                className="mt-1.5 w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-sm outline-none"
+                className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none focus:border-white/25"
               />
             </div>
           </div>
@@ -639,41 +674,40 @@ export default function SettingsPage() {
           <button
             type="submit"
             disabled={isSavingPassword}
-            className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+            className="h-10 rounded-xl bg-white px-4 text-xs font-semibold text-black transition hover:bg-white/90 disabled:opacity-50 sm:text-sm"
           >
             {isSavingPassword ? "Updating..." : "Update Password"}
           </button>
 
           {passwordMessage && (
-            <p className="text-sm text-white/70">{passwordMessage}</p>
+            <p className="text-xs text-white/70">{passwordMessage}</p>
           )}
         </form>
       </section>
 
       {/* PRIVACY POLICY & CSV EXPORT */}
-      <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <section className="mt-4 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Privacy &amp; Data Export</h2>
-            <p className="mt-1 text-sm text-white/50">
-              Export all your saved study sessions to CSV or view our privacy
-              policy.
+            <h2 className="text-base font-semibold">Privacy &amp; Data Export</h2>
+            <p className="mt-0.5 text-xs text-white/50">
+              Export all saved study sessions to CSV or view our privacy policy.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               disabled={isExportingCsv}
               onClick={handleExportAllDataCsv}
-              className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+              className="h-9 rounded-xl bg-white px-3.5 text-xs font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
             >
               {isExportingCsv ? "Exporting..." : "Export CSV"}
             </button>
 
             <Link
               href="/privacy"
-              className="rounded-xl border border-white/20 px-4 py-2 text-sm transition hover:bg-white/5"
+              className="inline-flex h-9 items-center rounded-xl border border-white/15 px-3.5 text-xs font-medium transition hover:bg-white/5"
             >
               Privacy Policy
             </Link>
@@ -682,20 +716,20 @@ export default function SettingsPage() {
       </section>
 
       {/* DANGER ZONE — DELETE ACCOUNT */}
-      <section className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/5 p-6">
-        <h2 className="text-lg font-semibold text-red-400">Delete Account</h2>
-        <p className="mt-1 text-sm text-white/70">
+      <section className="mt-4 rounded-2xl border border-rose-500/25 bg-rose-500/[0.04] p-4 sm:p-6">
+        <h2 className="text-base font-semibold text-rose-400">Delete Account</h2>
+        <p className="mt-1 text-xs leading-relaxed text-white/65">
           Permanently delete your account and erase all saved study sessions,
           subjects, daily goals, and friendships. This action cannot be undone.
         </p>
 
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="mt-3.5 flex flex-col gap-2.5 sm:flex-row sm:items-center">
           <input
             type="text"
             value={deleteConfirmText}
             onChange={(e) => setDeleteConfirmText(e.target.value)}
             placeholder='Type "DELETE" to confirm'
-            className="flex-1 rounded-xl border border-red-500/30 bg-black px-4 py-3 text-sm outline-none"
+            className="h-10 flex-1 rounded-xl border border-rose-500/25 bg-[#09090b] px-3.5 text-sm outline-none focus:border-rose-500/50"
           />
 
           <button
@@ -705,7 +739,7 @@ export default function SettingsPage() {
               deleteConfirmText.trim().toUpperCase() !== "DELETE" ||
               isDeletingAccount
             }
-            className="rounded-xl border border-red-500/40 bg-red-500/20 px-5 py-3 text-sm font-semibold text-red-300 transition hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-40"
+            className="h-10 rounded-xl border border-rose-500/35 bg-rose-500/15 px-4 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm"
           >
             {isDeletingAccount ? "Deleting..." : "Delete My Account"}
           </button>

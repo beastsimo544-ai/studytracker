@@ -398,16 +398,18 @@ export default function HistoryPage() {
   );
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-6 py-10">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <main className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 sm:py-10">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold">Study History</h1>
-          <p className="mt-2 text-white/60">
-            Review, edit, or manually log past study sessions.
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            Study History
+          </h1>
+          <p className="mt-1 text-xs text-white/55 sm:text-sm">
+            Review, edit, export, or log past study sessions.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             disabled={filteredSessions.length === 0}
@@ -420,7 +422,7 @@ export default function HistoryPage() {
                 );
               }
             }}
-            className="rounded-xl border border-white/20 px-4 py-3 text-sm font-medium transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+            className="h-9 rounded-xl border border-white/15 bg-[#111113] px-3.5 text-xs font-medium transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:px-4 sm:text-sm"
           >
             Export CSV
           </button>
@@ -431,9 +433,9 @@ export default function HistoryPage() {
               setManualDateTime(getCurrentLocalDateTimeInput());
               setShowManualForm((prev) => !prev);
             }}
-            className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90"
+            className="h-9 rounded-xl bg-white px-3.5 text-xs font-semibold text-black transition hover:bg-white/90 sm:h-10 sm:px-4 sm:text-sm"
           >
-            {showManualForm ? "Cancel" : "+ Log Past Session"}
+            {showManualForm ? "Cancel" : "+ Log Session"}
           </button>
         </div>
       </div>
@@ -442,21 +444,21 @@ export default function HistoryPage() {
       {showManualForm && (
         <form
           onSubmit={handleAddManualSession}
-          className="mt-6 rounded-2xl border border-white/15 bg-white/5 p-6"
+          className="mt-4 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6"
         >
-          <h2 className="text-lg font-semibold">Log a Past Study Session</h2>
-          <p className="mt-1 text-xs text-white/50">
+          <h2 className="text-base font-semibold">Log a Past Study Session</h2>
+          <p className="mt-0.5 text-xs text-white/50">
             Forgot to start the timer? Add your study time manually here.
           </p>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-3.5 grid gap-3 sm:grid-cols-2">
             <div>
               <label className="text-xs text-white/60">Subject</label>
               {availableSubjects.length > 0 ? (
                 <select
                   value={manualSubject}
                   onChange={(e) => setManualSubject(e.target.value)}
-                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-sm outline-none"
+                  className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none"
                 >
                   {availableSubjects.map((sub) => (
                     <option key={sub} value={sub}>
@@ -471,23 +473,23 @@ export default function HistoryPage() {
                   onChange={(e) => setManualSubject(e.target.value)}
                   placeholder="e.g. Mathematics"
                   required
-                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-sm outline-none"
+                  className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none"
                 />
               )}
             </div>
 
             <div>
-              <label className="text-xs text-white/60">Date & Time</label>
+              <label className="text-xs text-white/60">Date &amp; Time</label>
               <input
                 type="datetime-local"
                 value={manualDateTime}
                 onChange={(e) => setManualDateTime(e.target.value)}
                 required
-                className="mt-1.5 w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-sm outline-none"
+                className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               <div>
                 <label className="text-xs text-white/60">Hours</label>
                 <input
@@ -498,7 +500,7 @@ export default function HistoryPage() {
                   onChange={(e) =>
                     setManualHours(Math.max(0, Number(e.target.value) || 0))
                   }
-                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-sm outline-none"
+                  className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm tabular-nums outline-none"
                 />
               </div>
 
@@ -514,7 +516,7 @@ export default function HistoryPage() {
                       Math.min(59, Math.max(0, Number(e.target.value) || 0))
                     )
                   }
-                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-sm outline-none"
+                  className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm tabular-nums outline-none"
                 />
               </div>
             </div>
@@ -527,16 +529,16 @@ export default function HistoryPage() {
                 onChange={(e) => setManualNote(e.target.value)}
                 maxLength={140}
                 placeholder="e.g. TD 3 — Exercices"
-                className="mt-1.5 w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-sm outline-none"
+                className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none"
               />
             </div>
           </div>
 
-          <div className="mt-5 flex justify-end">
+          <div className="mt-4 flex justify-end">
             <button
               type="submit"
               disabled={isSavingManual}
-              className="rounded-xl bg-white px-6 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+              className="h-10 rounded-xl bg-white px-5 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
             >
               {isSavingManual ? "Saving..." : "Save Session"}
             </button>
@@ -544,55 +546,59 @@ export default function HistoryPage() {
         </form>
       )}
 
-      {/* FILTERS */}
-      <div className="mt-8 flex flex-wrap gap-4">
-        <select
-          value={selectedSubject}
-          onChange={(e) => setSelectedSubject(e.target.value)}
-          className="rounded-xl border border-white/10 bg-black px-4 py-3"
-        >
-          <option value="All">All subjects</option>
+      {/* FILTERS & SUMMARY BAR */}
+      <div className="mt-5 grid gap-3 sm:grid-cols-[auto_auto_1fr] sm:items-center">
+        <div className="grid grid-cols-2 gap-2.5 sm:contents">
+          <select
+            value={selectedSubject}
+            onChange={(e) => setSelectedSubject(e.target.value)}
+            className="h-10 rounded-xl border border-white/[0.08] bg-[#111113] px-3.5 text-xs font-medium text-white outline-none sm:min-w-[160px] sm:text-sm"
+          >
+            <option value="All">All subjects</option>
 
-          {subjects.map((subject) => (
-            <option key={subject} value={subject}>
-              {subject}
-            </option>
-          ))}
-        </select>
+            {subjects.map((subject) => (
+              <option key={subject} value={subject}>
+                {subject}
+              </option>
+            ))}
+          </select>
 
-        <select
-          value={selectedPeriod}
-          onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="rounded-xl border border-white/10 bg-black px-4 py-3"
-        >
-          <option value="All">All time</option>
-          <option value="Today">Today</option>
-          <option value="Week">This week</option>
-          <option value="Month">This month</option>
-        </select>
-      </div>
+          <select
+            value={selectedPeriod}
+            onChange={(e) => setSelectedPeriod(e.target.value)}
+            className="h-10 rounded-xl border border-white/[0.08] bg-[#111113] px-3.5 text-xs font-medium text-white outline-none sm:min-w-[140px] sm:text-sm"
+          >
+            <option value="All">All time</option>
+            <option value="Today">Today</option>
+            <option value="Week">This week</option>
+            <option value="Month">This month</option>
+          </select>
+        </div>
 
-      <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5">
-        <p className="text-sm text-white/50">Total study time</p>
-        <p className="mt-2 font-mono text-2xl font-bold">
-          {formatDuration(filteredTotalSeconds)}
-        </p>
+        <div className="flex h-10 items-center justify-between rounded-xl border border-white/[0.08] bg-[#111113] px-3.5 sm:justify-self-end sm:gap-4 sm:px-4">
+          <span className="text-xs text-white/50">
+            Total ({filteredSessions.length})
+          </span>
+          <span className="font-mono text-sm font-bold tabular-nums text-white sm:text-base">
+            {formatDuration(filteredTotalSeconds)}
+          </span>
+        </div>
       </div>
 
       {/* HISTORY LIST */}
-      <div className="mt-6">
+      <div className="mt-4">
         {isLoading ? (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
-            <p className="text-white/60">Loading study history...</p>
+          <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-6 text-center">
+            <p className="text-sm text-white/55">Loading study history...</p>
           </div>
         ) : filteredSessions.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
-            <p className="text-white/60">
+          <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-6 text-center">
+            <p className="text-sm text-white/55">
               No study sessions match these filters.
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-white/10">
+          <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111113]">
             {filteredSessions.map((session) => {
               const dotColor = resolveSubjectColor(
                 session.subject,
@@ -602,15 +608,15 @@ export default function HistoryPage() {
               return (
                 <div
                   key={session.id}
-                  className="flex flex-col gap-4 border-b border-white/10 bg-white/5 px-6 py-5 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                  className="border-b border-white/[0.06] px-4 py-3.5 last:border-b-0 sm:px-5 sm:py-4"
                 >
-                  <div className="flex-1">
-                    {editingSessionId === session.id ? (
-                      <div className="space-y-2.5">
+                  {editingSessionId === session.id ? (
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-1 flex-col gap-2 sm:flex-row">
                         <select
                           value={editSubject}
                           onChange={(e) => setEditSubject(e.target.value)}
-                          className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white"
+                          className="h-9 rounded-lg border border-white/12 bg-[#09090b] px-3 text-xs text-white sm:text-sm"
                         >
                           {Array.from(
                             new Set([session.subject, ...availableSubjects])
@@ -627,44 +633,14 @@ export default function HistoryPage() {
                           onChange={(e) => setEditNote(e.target.value)}
                           maxLength={140}
                           placeholder="Session note (optional)"
-                          className="block w-full max-w-md rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none"
+                          className="h-9 flex-1 rounded-lg border border-white/12 bg-[#09090b] px-3 text-xs text-white outline-none sm:max-w-sm sm:text-sm"
                         />
                       </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2.5">
-                          <span
-                            className="h-3 w-3 shrink-0 rounded-full"
-                            style={{ backgroundColor: dotColor }}
-                          />
-                          <p className="text-lg font-semibold">
-                            {session.subject}
-                          </p>
-                        </div>
 
-                        {session.note && (
-                          <p className="mt-1 text-sm text-white/75">
-                            {session.note}
-                          </p>
-                        )}
-                      </>
-                    )}
-
-                    <p className="mt-1 text-xs text-white/45">
-                      {formatDate(session.created_at)}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3 self-end sm:self-auto">
-                    <p className="font-mono text-lg font-semibold">
-                      {formatDuration(session.duration)}
-                    </p>
-
-                    {editingSessionId === session.id ? (
-                      <>
+                      <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => saveEdit(session.id)}
-                          className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-sm text-green-400 transition hover:bg-green-500/20"
+                          className="h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/15 px-3 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/25"
                         >
                           Save
                         </button>
@@ -675,33 +651,61 @@ export default function HistoryPage() {
                             setEditSubject("");
                             setEditNote("");
                           }}
-                          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70 transition hover:bg-white/10"
+                          className="h-8 rounded-lg border border-white/12 px-3 text-xs text-white/65 transition hover:text-white"
                         >
                           Cancel
                         </button>
-                      </>
-                    ) : (
-                      <>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: dotColor }}
+                          />
+                          <p className="truncate text-sm font-semibold sm:text-base">
+                            {session.subject}
+                          </p>
+                        </div>
+
+                        {session.note && (
+                          <p className="mt-0.5 truncate text-xs text-white/70">
+                            {session.note}
+                          </p>
+                        )}
+
+                        <p className="mt-0.5 text-[11px] text-white/40 tabular-nums">
+                          {formatDate(session.created_at)}
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                        <p className="font-mono text-sm font-semibold tabular-nums sm:text-base">
+                          {formatDuration(session.duration)}
+                        </p>
+
                         <button
                           onClick={() => {
                             setEditingSessionId(session.id);
                             setEditSubject(session.subject);
                             setEditNote(session.note ?? "");
                           }}
-                          className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-sm text-blue-400 transition hover:bg-blue-500/20"
+                          className="h-8 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 text-xs text-white/75 transition hover:border-white/20 hover:text-white"
                         >
                           Edit
                         </button>
 
                         <button
                           onClick={() => deleteSession(session.id)}
-                          className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400 transition hover:bg-red-500/20"
+                          className="h-8 rounded-lg border border-rose-500/20 bg-rose-500/10 px-2.5 text-xs text-rose-300 transition hover:bg-rose-500/20"
                         >
                           Delete
                         </button>
-                      </>
-                    )}
-                  </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

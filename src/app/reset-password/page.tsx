@@ -76,74 +76,90 @@ export default function ResetPasswordPage() {
 
   if (isChecking) {
     return (
-      <main className="mx-auto w-full max-w-md px-6 py-16">
-        <p className="text-white/60">Verifying reset link...</p>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-8 sm:px-6 sm:py-14">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-6 text-center">
+          <p className="text-sm text-white/55">Verifying reset link...</p>
+        </div>
       </main>
     );
   }
 
   if (!hasRecoverySession) {
     return (
-      <main className="mx-auto w-full max-w-md px-6 py-16">
-        <h1 className="text-3xl font-bold">Reset link expired</h1>
-        <p className="mt-3 text-sm text-white/60">
-          Open the password reset link directly from your email, or request a
-          fresh reset link from the login page.
-        </p>
-        <Link
-          href="/login"
-          className="mt-6 inline-block rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black"
-        >
-          Go to Login
-        </Link>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-8 sm:px-6 sm:py-14">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-5 sm:p-7">
+          <h1 className="text-2xl font-bold tracking-tight">
+            Reset link expired
+          </h1>
+          <p className="mt-2 text-xs leading-relaxed text-white/60 sm:text-sm">
+            Open the password reset link directly from your email, or request a
+            fresh reset link from the sign-in page.
+          </p>
+          <Link
+            href="/login"
+            className="mt-5 inline-flex h-10 items-center rounded-xl bg-white px-5 text-sm font-semibold text-black transition hover:bg-white/90"
+          >
+            Go to Sign In
+          </Link>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto w-full max-w-md px-6 py-16">
-      <h1 className="text-3xl font-bold">Choose a new password</h1>
-      <p className="mt-2 text-white/60">
-        Enter a new password for your StudyTracker account.
-      </p>
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-8 sm:px-6 sm:py-14">
+      <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-5 sm:p-7">
+        <h1 className="text-2xl font-bold tracking-tight">
+          Choose a new password
+        </h1>
+        <p className="mt-1.5 text-xs text-white/55 sm:text-sm">
+          Enter a new password for your StudyTracker account.
+        </p>
 
-      <form onSubmit={handleUpdatePassword} className="mt-8 space-y-5">
-        <div>
-          <label className="text-sm text-white/70">New password</label>
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            required
-            minLength={6}
-            className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none"
-            placeholder="At least 6 characters"
-          />
-        </div>
+        <form onSubmit={handleUpdatePassword} className="mt-6 space-y-4">
+          <div>
+            <label className="text-xs font-medium text-white/70">
+              New password
+            </label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              minLength={6}
+              className="mt-1.5 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none focus:border-white/25"
+              placeholder="At least 6 characters"
+            />
+          </div>
 
-        <div>
-          <label className="text-sm text-white/70">Confirm new password</label>
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-            minLength={6}
-            className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none"
-            placeholder="Repeat new password"
-          />
-        </div>
+          <div>
+            <label className="text-xs font-medium text-white/70">
+              Confirm new password
+            </label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              minLength={6}
+              className="mt-1.5 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none focus:border-white/25"
+              placeholder="Repeat new password"
+            />
+          </div>
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full rounded-xl bg-white px-5 py-3 font-semibold text-black transition hover:bg-white/90 disabled:opacity-60"
-        >
-          {isSubmitting ? "Saving..." : "Update Password"}
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="h-11 w-full rounded-xl bg-white px-5 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-60"
+          >
+            {isSubmitting ? "Saving..." : "Update Password"}
+          </button>
+        </form>
 
-      {message && <p className="mt-5 text-sm text-white/70">{message}</p>}
+        {message && (
+          <p className="mt-4 text-xs text-white/75 sm:text-sm">{message}</p>
+        )}
+      </div>
     </main>
   );
 }

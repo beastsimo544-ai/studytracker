@@ -34,32 +34,32 @@ export default function DownloadPage() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-12">
+    <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-12">
       {/* HERO DOWNLOAD CARD */}
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-8 sm:p-10">
-        <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center">
+      <section className="rounded-2xl border border-white/[0.08] bg-[#111113] p-5 sm:p-8">
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/playstore-icon-512.png"
             alt="StudyTracker App Icon"
-            className="h-24 w-24 shrink-0 rounded-3xl border border-white/15 object-cover shadow-2xl"
+            className="h-16 w-16 shrink-0 rounded-2xl border border-white/12 object-cover shadow-xl sm:h-20 sm:w-20"
           />
 
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-0.5 text-xs font-semibold text-emerald-300">
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-300">
                 Android App · v1.0
               </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-0.5 text-xs text-white/60">
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] text-white/60">
                 Android 7.0+ · ~5.3 MB
               </span>
             </div>
 
-            <h1 className="mt-3 text-3xl font-bold sm:text-4xl">
+            <h1 className="mt-2.5 text-2xl font-bold tracking-tight sm:text-3xl">
               Download StudyTracker
             </h1>
 
-            <p className="mt-2 text-sm leading-relaxed text-white/65 sm:text-base">
+            <p className="mt-1.5 text-xs leading-relaxed text-white/60 sm:text-sm">
               Install StudyTracker directly on your Android phone for distraction-free
               focus timers, native Pomodoro &amp; exam reminders, live friend
               leaderboards, and instant CSV exports.
@@ -68,27 +68,27 @@ export default function DownloadPage() {
         </div>
 
         {isNativeApp ? (
-          <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-5">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4">
             <div>
-              <p className="text-sm font-semibold text-emerald-300">
+              <p className="text-xs font-semibold text-emerald-300 sm:text-sm">
                 You&apos;re using the StudyTracker Android App ✓
               </p>
               <p className="mt-0.5 text-xs text-white/70">
-                Want to invite a friend? Copy the download page link below and
-                send it to them!
+                Want to invite a friend? Copy the download link below and send
+                it to them!
               </p>
             </div>
 
             <button
               type="button"
               onClick={handleCopyDownloadLink}
-              className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90"
+              className="h-10 rounded-xl bg-white px-4 text-xs font-semibold text-black transition hover:bg-white/90 sm:text-sm"
             >
               Copy Link for a Friend
             </button>
           </div>
         ) : (
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
             <a
               href="/StudyTracker.apk"
               download="StudyTracker.apk"
@@ -98,7 +98,7 @@ export default function DownloadPage() {
                   "Open the downloaded APK on your Android phone to install."
                 )
               }
-              className="inline-flex items-center gap-2.5 rounded-xl bg-white px-7 py-3.5 text-sm font-semibold text-black transition hover:bg-white/90"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-semibold text-black transition hover:bg-white/90"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -119,14 +119,14 @@ export default function DownloadPage() {
             <button
               type="button"
               onClick={handleCopyDownloadLink}
-              className="rounded-xl border border-white/20 px-5 py-3.5 text-sm font-medium transition hover:bg-white/5"
+              className="h-11 rounded-xl border border-white/15 bg-white/[0.03] px-5 text-sm font-medium transition hover:bg-white/[0.06]"
             >
               Copy Share Link
             </button>
 
             <Link
               href="/timer"
-              className="rounded-xl px-4 py-3.5 text-sm text-white/60 transition hover:text-white"
+              className="inline-flex h-10 items-center justify-center px-3 text-xs font-medium text-white/60 transition hover:text-white sm:text-sm"
             >
               Or use in browser →
             </Link>
@@ -135,29 +135,29 @@ export default function DownloadPage() {
       </section>
 
       {/* WHAT'S INCLUDED */}
-      <section className="mt-8 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-          <p className="text-lg">⏱️</p>
-          <h2 className="mt-2 font-semibold">Focus &amp; Pomodoro</h2>
-          <p className="mt-1 text-xs leading-relaxed text-white/60">
+      <section className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
+          <p className="text-base">⏱️</p>
+          <h2 className="mt-1.5 text-sm font-semibold">Focus &amp; Pomodoro</h2>
+          <p className="mt-1 text-xs leading-relaxed text-white/55">
             Full-screen Focus Mode, Pomodoro blocks, screen wake-lock, and
             background lock-screen notifications.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-          <p className="text-lg">🟢</p>
-          <h2 className="mt-2 font-semibold">Live Friends &amp; Streaks</h2>
-          <p className="mt-1 text-xs leading-relaxed text-white/60">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
+          <p className="text-base">🟢</p>
+          <h2 className="mt-1.5 text-sm font-semibold">Live Friends &amp; Streaks</h2>
+          <p className="mt-1 text-xs leading-relaxed text-white/55">
             See when friends are studying in real time, compare daily &amp;
             weekly leaderboards, and unlock badges.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-          <p className="text-lg">📊</p>
-          <h2 className="mt-2 font-semibold">Synced Cloud + CSV Export</h2>
-          <p className="mt-1 text-xs leading-relaxed text-white/60">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
+          <p className="text-base">📊</p>
+          <h2 className="mt-1.5 text-sm font-semibold">Synced Cloud + CSV</h2>
+          <p className="mt-1 text-xs leading-relaxed text-white/55">
             Your study history syncs automatically between web and Android, and
             exports to Excel-ready CSV anytime.
           </p>
@@ -165,12 +165,12 @@ export default function DownloadPage() {
       </section>
 
       {/* 3-STEP INSTALL INSTRUCTIONS */}
-      <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
-        <h2 className="text-lg font-semibold">How to Install on Android</h2>
+      <section className="mt-4 rounded-2xl border border-white/[0.08] bg-[#111113] p-5 sm:p-6">
+        <h2 className="text-base font-semibold">How to Install on Android</h2>
 
-        <ol className="mt-4 space-y-3 text-sm text-white/75">
+        <ol className="mt-3.5 space-y-2.5 text-xs leading-relaxed text-white/75 sm:text-sm">
           <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-bold text-white">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/12 text-[11px] font-bold text-white">
               1
             </span>
             <span>
@@ -180,7 +180,7 @@ export default function DownloadPage() {
           </li>
 
           <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-bold text-white">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/12 text-[11px] font-bold text-white">
               2
             </span>
             <span>
@@ -191,7 +191,7 @@ export default function DownloadPage() {
           </li>
 
           <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-bold text-white">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/12 text-[11px] font-bold text-white">
               3
             </span>
             <span>

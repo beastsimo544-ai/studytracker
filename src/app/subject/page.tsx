@@ -320,17 +320,19 @@ export default function SubjectPage() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-10">
+    <main className="mx-auto w-full max-w-4xl px-4 py-5 sm:px-6 sm:py-10">
       <div>
-        <h1 className="text-3xl font-bold">Subjects</h1>
-        <p className="mt-2 text-white/60">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          Subjects
+        </h1>
+        <p className="mt-1 text-xs text-white/55 sm:text-sm">
           Create and color-code the subjects you study.
         </p>
       </div>
 
       {/* ADD SUBJECT CARD */}
-      <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-5">
-        <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="mt-5 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
+        <div className="flex items-center gap-2.5">
           <input
             type="text"
             value={newSubject}
@@ -341,18 +343,18 @@ export default function SubjectPage() {
               }
             }}
             placeholder="Add a new subject..."
-            className="flex-1 rounded-xl border border-white/10 bg-black px-4 py-3 outline-none"
+            className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none focus:border-white/25"
           />
 
           <button
             onClick={addSubject}
-            className="rounded-xl bg-white px-6 py-3 font-semibold text-black transition hover:bg-white/90"
+            className="h-10 shrink-0 rounded-xl bg-white px-4 text-xs font-semibold text-black transition hover:bg-white/90 sm:px-5 sm:text-sm"
           >
             Add Subject
           </button>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2.5">
+        <div className="mt-3.5 flex flex-wrap items-center gap-2">
           <span className="text-xs text-white/50">Color:</span>
           {SUBJECT_COLOR_OPTIONS.map((opt) => {
             const selected = newColor.toLowerCase() === opt.hex.toLowerCase();
@@ -365,7 +367,7 @@ export default function SubjectPage() {
                 onClick={() => setNewColor(opt.hex)}
                 className={`h-6 w-6 rounded-full transition ${
                   selected
-                    ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#0a0a0a]"
+                    ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#111113]"
                     : "opacity-75 hover:opacity-100"
                 }`}
                 style={{ backgroundColor: opt.hex }}
@@ -376,119 +378,124 @@ export default function SubjectPage() {
       </div>
 
       {/* SUBJECT LIST */}
-      <div className="mt-8 space-y-3">
+      <div className="mt-5">
         {isLoading ? (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
-            <p className="text-white/60">Loading subjects...</p>
+          <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-6 text-center">
+            <p className="text-sm text-white/55">Loading subjects...</p>
           </div>
         ) : subjects.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
-            <p className="text-white/60">No subjects yet.</p>
+          <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-6 text-center">
+            <p className="text-sm text-white/55">No subjects yet.</p>
           </div>
         ) : (
-          subjects.map((subject) => {
-            const activeColor = resolveSubjectColor(subject.name, {
-              [subject.name]: subject.color,
-            });
+          <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111113]">
+            {subjects.map((subject) => {
+              const activeColor = resolveSubjectColor(subject.name, {
+                [subject.name]: subject.color,
+              });
 
-            return (
-              <div
-                key={subject.id}
-                className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                {editingSubjectId === subject.id ? (
-                  <div className="flex flex-1 flex-col gap-3">
-                    <input
-                      type="text"
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          saveSubjectEdit(subject.id);
-                        } else if (e.key === "Escape") {
-                          setEditingSubjectId(null);
-                          setEditingName("");
-                        }
-                      }}
-                      className="w-full rounded-lg border border-white/10 bg-black px-3 py-2 outline-none"
-                    />
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      {SUBJECT_COLOR_OPTIONS.map((opt) => {
-                        const selected =
-                          editingColor.toLowerCase() === opt.hex.toLowerCase();
-                        return (
-                          <button
-                            key={opt.hex}
-                            type="button"
-                            title={opt.label}
-                            onClick={() => setEditingColor(opt.hex)}
-                            className={`h-5 w-5 rounded-full transition ${
-                              selected
-                                ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#0a0a0a]"
-                                : "opacity-70 hover:opacity-100"
-                            }`}
-                            style={{ backgroundColor: opt.hex }}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="h-3.5 w-3.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: activeColor }}
-                    />
-                    <span className="font-medium">{subject.name}</span>
-                  </div>
-                )}
-
-                <div className="flex gap-2 self-end sm:self-auto">
+              return (
+                <div
+                  key={subject.id}
+                  className="border-b border-white/[0.06] px-4 py-3.5 last:border-b-0 sm:px-5"
+                >
                   {editingSubjectId === subject.id ? (
-                    <>
-                      <button
-                        onClick={() => saveSubjectEdit(subject.id)}
-                        className="rounded-lg border border-green-500/20 bg-green-500/10 px-4 py-2 text-sm text-green-400"
-                      >
-                        Save
-                      </button>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-1 flex-col gap-2.5">
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              saveSubjectEdit(subject.id);
+                            } else if (e.key === "Escape") {
+                              setEditingSubjectId(null);
+                              setEditingName("");
+                            }
+                          }}
+                          className="h-9 w-full rounded-lg border border-white/12 bg-[#09090b] px-3 text-sm outline-none"
+                        />
 
-                      <button
-                        onClick={() => {
-                          setEditingSubjectId(null);
-                          setEditingName("");
-                        }}
-                        className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/60 hover:text-white"
-                      >
-                        Cancel
-                      </button>
-                    </>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {SUBJECT_COLOR_OPTIONS.map((opt) => {
+                            const selected =
+                              editingColor.toLowerCase() ===
+                              opt.hex.toLowerCase();
+                            return (
+                              <button
+                                key={opt.hex}
+                                type="button"
+                                title={opt.label}
+                                onClick={() => setEditingColor(opt.hex)}
+                                className={`h-5 w-5 rounded-full transition ${
+                                  selected
+                                    ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#111113]"
+                                    : "opacity-70 hover:opacity-100"
+                                }`}
+                                style={{ backgroundColor: opt.hex }}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => saveSubjectEdit(subject.id)}
+                          className="h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/15 px-3 text-xs font-medium text-emerald-300"
+                        >
+                          Save
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setEditingSubjectId(null);
+                            setEditingName("");
+                          }}
+                          className="h-8 rounded-lg border border-white/12 px-3 text-xs text-white/65 hover:text-white"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   ) : (
-                    <>
-                      <button
-                        onClick={() => {
-                          setEditingSubjectId(subject.id);
-                          setEditingName(subject.name);
-                          setEditingColor(activeColor);
-                        }}
-                        className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm text-blue-400"
-                      >
-                        Edit
-                      </button>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-full"
+                          style={{ backgroundColor: activeColor }}
+                        />
+                        <span className="truncate text-sm font-medium sm:text-base">
+                          {subject.name}
+                        </span>
+                      </div>
 
-                      <button
-                        onClick={() => deleteSubject(subject.id)}
-                        className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/60 hover:text-white"
-                      >
-                        Delete
-                      </button>
-                    </>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingSubjectId(subject.id);
+                            setEditingName(subject.name);
+                            setEditingColor(activeColor);
+                          }}
+                          className="h-8 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-xs text-white/75 transition hover:border-white/20 hover:text-white"
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          onClick={() => deleteSubject(subject.id)}
+                          className="h-8 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 text-xs text-rose-300 transition hover:bg-rose-500/20"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
     </main>

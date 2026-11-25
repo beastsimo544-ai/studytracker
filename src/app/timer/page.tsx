@@ -447,7 +447,10 @@ export default function TimerPage() {
             setSessionNote("");
             const msg = `Focus block complete (${focusMinutes}m saved)! Time for a ${breakMinutes}m break.`;
             setStatusBanner(msg);
-            toast.success("🍅 Focus Block Saved!", `Take a ${breakMinutes}m break.`);
+            toast.success(
+              "🍅 Focus Block Saved!",
+              `Take a ${breakMinutes}m break.`
+            );
             await checkNewAchievements();
           } else {
             setStatusBanner(
@@ -770,31 +773,31 @@ export default function TimerPage() {
 
   const isBreakPhase = timerMode === "pomodoro" && pomodoroPhase === "break";
 
-  // Distraction-free Minimal Focus Mode (normal timer only, all extras hidden)
+  // Distraction-free Minimal Focus Mode
   if (isMinimalFocus) {
     return (
-      <main className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0a0a0a] px-6">
+      <main className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#09090b] px-5">
         <button
           type="button"
           onClick={() => setIsMinimalFocus(false)}
-          className="fixed right-6 top-6 rounded-xl border border-white/15 px-4 py-2 text-xs font-medium text-white/60 transition hover:border-white/30 hover:text-white"
+          className="fixed right-5 top-[max(1.25rem,env(safe-area-inset-top))] rounded-full border border-white/15 px-3.5 py-1.5 text-xs font-medium text-white/60 transition hover:border-white/30 hover:text-white"
         >
           Exit Focus
         </button>
 
-        <div className="w-full max-w-xl text-center">
+        <div className="w-full max-w-md text-center">
           {hasSessionProgress ? (
-            <p className="text-sm font-medium tracking-wide text-white/50">
+            <p className="text-xs font-medium tracking-wider uppercase text-white/50">
               {selectedSubject || "Study"}
             </p>
           ) : (
-            <div className="mx-auto max-w-xs">
+            <div className="mx-auto max-w-[240px]">
               <select
                 value={selectedSubject}
                 onChange={(e) => setSelectedSubject(e.target.value)}
                 disabled={subjects.length === 0}
                 aria-label="Subject"
-                className="w-full rounded-xl border border-white/10 bg-black px-4 py-2.5 text-center text-sm text-white/85 outline-none disabled:opacity-50"
+                className="h-10 w-full rounded-xl border border-white/10 bg-[#111113] px-3.5 text-center text-sm text-white/85 outline-none disabled:opacity-50"
               >
                 {subjects.length === 0 ? (
                   <option value="">No subjects yet</option>
@@ -809,41 +812,41 @@ export default function TimerPage() {
             </div>
           )}
 
-          <p className="my-14 font-mono text-6xl font-bold tracking-wider sm:text-8xl">
+          <p className="my-10 font-mono text-5xl font-bold tracking-tight tabular-nums sm:my-14 sm:text-7xl">
             {formatTime(seconds)}
           </p>
 
-          <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
+          <div className="mx-auto grid max-w-sm grid-cols-[1fr_1.35fr_1fr] gap-2.5">
+            <button
+              onClick={resetTimer}
+              className="h-11 rounded-xl border border-white/15 text-xs font-semibold text-white/80 transition hover:bg-white/5 sm:text-sm"
+            >
+              Reset
+            </button>
+
             {!isRunning ? (
               <button
                 onClick={startTimer}
                 disabled={!selectedSubject}
-                className="rounded-xl bg-white px-8 py-3 font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="h-11 rounded-xl bg-white text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {seconds > 0 ? "Resume" : "Start"}
               </button>
             ) : (
               <button
                 onClick={pauseTimer}
-                className="rounded-xl bg-white px-8 py-3 font-semibold text-black transition hover:bg-white/90"
+                className="h-11 rounded-xl bg-white text-sm font-semibold text-black transition hover:bg-white/90"
               >
                 Pause
               </button>
             )}
 
             <button
-              onClick={resetTimer}
-              className="rounded-xl border border-white/20 px-8 py-3 font-semibold transition hover:bg-white/5"
-            >
-              Reset
-            </button>
-
-            <button
               onClick={finishSession}
               disabled={seconds === 0 || !selectedSubject || isSaving}
-              className="rounded-xl border border-white/20 px-8 py-3 font-semibold transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30"
+              className="h-11 rounded-xl border border-white/15 text-xs font-semibold text-white/90 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30 sm:text-sm"
             >
-              {isSaving ? "Saving..." : "Finish Session"}
+              {isSaving ? "..." : "Finish"}
             </button>
           </div>
         </div>
@@ -852,25 +855,28 @@ export default function TimerPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-10">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <main className="mx-auto w-full max-w-2xl px-4 py-5 sm:px-6 sm:py-10">
+      {/* Compact Header Row */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold">Study Timer</h1>
-          <p className="mt-2 text-white/60">
-            Track open-ended sessions or focus with Pomodoro blocks.
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            Study Timer
+          </h1>
+          <p className="mt-0.5 text-xs text-white/55 sm:text-sm">
+            Open-ended stopwatch or structured Pomodoro focus.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={enterMinimalFocus}
-            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/80 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
+            className="h-9 rounded-xl border border-white/12 bg-[#111113] px-3 text-xs font-medium text-white/80 transition hover:border-white/25 hover:text-white"
           >
             Focus Mode
           </button>
 
-          <div className="inline-flex rounded-xl border border-white/10 bg-white/5 p-1">
+          <div className="inline-flex h-9 items-center rounded-xl border border-white/10 bg-[#111113] p-1">
             <button
               type="button"
               disabled={hasSessionProgress}
@@ -878,10 +884,10 @@ export default function TimerPage() {
                 setTimerMode("stopwatch");
                 setStatusBanner("");
               }}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`h-7 rounded-lg px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                 timerMode === "stopwatch"
                   ? "bg-white text-black"
-                  : "text-white/65 hover:text-white"
+                  : "text-white/60 hover:text-white"
               }`}
             >
               Stopwatch
@@ -894,10 +900,10 @@ export default function TimerPage() {
                 setPomodoroPhase("focus");
                 setStatusBanner("");
               }}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`h-7 rounded-lg px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                 timerMode === "pomodoro"
                   ? "bg-white text-black"
-                  : "text-white/65 hover:text-white"
+                  : "text-white/60 hover:text-white"
               }`}
             >
               Pomodoro
@@ -907,21 +913,22 @@ export default function TimerPage() {
       </div>
 
       {statusBanner && (
-        <div className="mt-6 rounded-xl border border-green-500/25 bg-green-500/10 px-4 py-3 text-sm text-green-300">
+        <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-2.5 text-xs text-emerald-300">
           {statusBanner}
         </div>
       )}
 
-      <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6 sm:p-8">
+      {/* Main Timer Card (Fits cleanly on 1 mobile screen without scrolling) */}
+      <div className="mt-5 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:mt-7 sm:p-7">
         {timerMode === "pomodoro" && (
-          <div className="mb-6 space-y-4 border-b border-white/10 pb-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="inline-flex rounded-xl border border-white/10 bg-black/40 p-1">
+          <div className="mb-4 space-y-3 border-b border-white/[0.08] pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="inline-flex rounded-xl border border-white/10 bg-[#09090b] p-1">
                 <button
                   type="button"
                   disabled={hasSessionProgress}
                   onClick={() => setPomodoroPhase("focus")}
-                  className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+                  className={`rounded-lg px-3 py-1 text-xs font-semibold transition disabled:opacity-50 ${
                     pomodoroPhase === "focus"
                       ? "bg-white text-black"
                       : "text-white/60 hover:text-white"
@@ -933,7 +940,7 @@ export default function TimerPage() {
                   type="button"
                   disabled={hasSessionProgress}
                   onClick={() => setPomodoroPhase("break")}
-                  className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+                  className={`rounded-lg px-3 py-1 text-xs font-semibold transition disabled:opacity-50 ${
                     pomodoroPhase === "break"
                       ? "bg-emerald-400 text-black"
                       : "text-white/60 hover:text-white"
@@ -943,23 +950,23 @@ export default function TimerPage() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {(["25-5", "50-10", "custom"] as const).map((option) => (
                   <button
                     key={option}
                     type="button"
                     disabled={hasSessionProgress}
                     onClick={() => applyPreset(option)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:opacity-40 ${
+                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-40 ${
                       preset === option
-                        ? "border-white/40 bg-white/15 text-white"
+                        ? "border-white/35 bg-white/12 text-white"
                         : "border-white/10 text-white/55 hover:text-white"
                     }`}
                   >
                     {option === "25-5"
-                      ? "25 / 5"
+                      ? "25/5"
                       : option === "50-10"
-                        ? "50 / 10"
+                        ? "50/10"
                         : "Custom"}
                   </button>
                 ))}
@@ -967,9 +974,9 @@ export default function TimerPage() {
             </div>
 
             {preset === "custom" && (
-              <div className="flex flex-wrap items-center gap-4 pt-1">
+              <div className="grid grid-cols-2 gap-3 pt-1 sm:w-64">
                 <div>
-                  <label className="mb-1 block text-xs text-white/50">
+                  <label className="mb-1 block text-[11px] text-white/50">
                     Focus (min)
                   </label>
                   <input
@@ -983,12 +990,12 @@ export default function TimerPage() {
                         Math.min(180, Math.max(1, Number(e.target.value) || 1))
                       )
                     }
-                    className="w-24 rounded-xl border border-white/10 bg-black px-3 py-2 text-sm outline-none disabled:opacity-50"
+                    className="h-9 w-full rounded-xl border border-white/10 bg-[#09090b] px-3 text-sm outline-none disabled:opacity-50"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs text-white/50">
+                  <label className="mb-1 block text-[11px] text-white/50">
                     Break (min)
                   </label>
                   <input
@@ -1002,14 +1009,14 @@ export default function TimerPage() {
                         Math.min(60, Math.max(1, Number(e.target.value) || 1))
                       )
                     }
-                    className="w-24 rounded-xl border border-white/10 bg-black px-3 py-2 text-sm outline-none disabled:opacity-50"
+                    className="h-9 w-full rounded-xl border border-white/10 bg-[#09090b] px-3 text-sm outline-none disabled:opacity-50"
                   />
                 </div>
               </div>
             )}
 
             {completedPomodoros > 0 && (
-              <p className="text-xs text-white/60">
+              <p className="text-[11px] text-white/55">
                 Completed focus blocks:{" "}
                 <span className="font-semibold text-white">
                   {completedPomodoros} 🍅
@@ -1019,15 +1026,15 @@ export default function TimerPage() {
           </div>
         )}
 
-        {/* Subject + Session Note */}
+        {/* Subject + Session Note (Compact 2-col on desktop, tight stack on mobile) */}
         {!isBreakPhase && (
-          <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 text-sm text-white/60">
+                <label className="flex items-center gap-2 text-xs font-medium text-white/60">
                   {selectedSubject && (
                     <span
-                      className="h-2.5 w-2.5 rounded-full"
+                      className="h-2 w-2 rounded-full"
                       style={{ backgroundColor: selectedColor }}
                     />
                   )}
@@ -1037,9 +1044,9 @@ export default function TimerPage() {
                 {isLoggedIn && subjects.length === 0 && (
                   <Link
                     href="/subject"
-                    className="text-sm text-white underline hover:text-white/80"
+                    className="text-xs text-white underline hover:text-white/80"
                   >
-                    Add a subject first →
+                    Add subject →
                   </Link>
                 )}
               </div>
@@ -1048,7 +1055,7 @@ export default function TimerPage() {
                 value={selectedSubject}
                 onChange={(e) => setSelectedSubject(e.target.value)}
                 disabled={hasSessionProgress || subjects.length === 0}
-                className="mt-2 w-full rounded-xl border border-white/10 bg-black p-3 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-1.5 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {subjects.length === 0 ? (
                   <option value="">No subjects yet</option>
@@ -1063,36 +1070,35 @@ export default function TimerPage() {
             </div>
 
             <div>
-              <label className="text-sm text-white/60">
-                Session note{" "}
-                <span className="text-xs text-white/40">(optional)</span>
+              <label className="text-xs font-medium text-white/60">
+                Note <span className="text-white/35">(optional)</span>
               </label>
               <input
                 type="text"
                 value={sessionNote}
                 onChange={(e) => setSessionNote(e.target.value)}
                 maxLength={140}
-                placeholder="What are you working on? (e.g. Chapitre 3 — Exercices)"
-                className="mt-2 w-full rounded-xl border border-white/10 bg-black px-4 py-2.5 text-sm outline-none"
+                placeholder="e.g. Chapitre 3 — Exercices"
+                className="mt-1.5 h-10 w-full rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none focus:border-white/25"
               />
             </div>
           </div>
         )}
 
-        {/* Timer Readout */}
-        <div className="py-12 text-center">
+        {/* Proportioned Timer Readout */}
+        <div className="py-8 text-center sm:py-12">
           {isBreakPhase && (
-            <p className="mb-3 text-sm font-medium uppercase tracking-widest text-emerald-400">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-emerald-400">
               Break Time
             </p>
           )}
 
-          <p className="font-mono text-6xl font-bold tracking-wider sm:text-7xl">
+          <p className="font-mono text-5xl font-bold tracking-tight tabular-nums sm:text-7xl">
             {formatTime(displaySeconds)}
           </p>
 
           {timerMode === "pomodoro" && (
-            <div className="mx-auto mt-6 h-2 max-w-sm overflow-hidden rounded-full bg-white/10">
+            <div className="mx-auto mt-5 h-1.5 max-w-xs overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full rounded-full transition-all"
                 style={{
@@ -1104,13 +1110,20 @@ export default function TimerPage() {
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
+        {/* Single-Row Balanced Controls (Mobile & Desktop) */}
+        <div className="mx-auto grid max-w-md grid-cols-[1fr_1.35fr_1fr] gap-2.5 sm:gap-3">
+          <button
+            onClick={resetTimer}
+            className="h-11 rounded-xl border border-white/15 text-xs font-semibold text-white/80 transition hover:bg-white/5 sm:text-sm"
+          >
+            Reset
+          </button>
+
           {!isRunning ? (
             <button
               onClick={startTimer}
               disabled={!isBreakPhase && !selectedSubject}
-              className={`rounded-xl px-8 py-3 font-semibold text-black transition disabled:cursor-not-allowed disabled:opacity-40 ${
+              className={`h-11 rounded-xl text-sm font-semibold text-black transition disabled:cursor-not-allowed disabled:opacity-40 ${
                 isBreakPhase
                   ? "bg-emerald-400 hover:bg-emerald-300"
                   : "bg-white hover:bg-white/90"
@@ -1125,33 +1138,26 @@ export default function TimerPage() {
           ) : (
             <button
               onClick={pauseTimer}
-              className="rounded-xl bg-white px-8 py-3 font-semibold text-black transition hover:bg-white/90"
+              className="h-11 rounded-xl bg-white text-sm font-semibold text-black transition hover:bg-white/90"
             >
               Pause
             </button>
           )}
 
-          <button
-            onClick={resetTimer}
-            className="rounded-xl border border-white/20 px-8 py-3 font-semibold transition hover:bg-white/5"
-          >
-            Reset
-          </button>
-
           {isBreakPhase ? (
             <button
               onClick={skipBreak}
-              className="rounded-xl border border-white/20 px-8 py-3 font-semibold transition hover:bg-white/5"
+              className="h-11 rounded-xl border border-white/15 text-xs font-semibold text-white/85 transition hover:bg-white/5 sm:text-sm"
             >
-              Skip Break
+              Skip
             </button>
           ) : (
             <button
               onClick={finishSession}
               disabled={seconds === 0 || !selectedSubject || isSaving}
-              className="rounded-xl border border-white/20 px-8 py-3 font-semibold transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30"
+              className="h-11 rounded-xl border border-white/15 text-xs font-semibold text-white/90 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30 sm:text-sm"
             >
-              {isSaving ? "Saving..." : "Finish Session"}
+              {isSaving ? "Saving..." : "Finish"}
             </button>
           )}
         </div>

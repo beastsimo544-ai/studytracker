@@ -47,7 +47,6 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  // Upcoming Exams state
   const [exams, setExams] = useState<ExamItem[]>([]);
   const [examsUseLocalFallback, setExamsUseLocalFallback] = useState(false);
   const [showAddExam, setShowAddExam] = useState(false);
@@ -72,7 +71,6 @@ export default function Dashboard() {
 
       setCurrentUserId(user.id);
 
-      // 1. Load daily goal
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("daily_goal_minutes")
@@ -94,7 +92,6 @@ export default function Dashboard() {
         setDailyGoalMinutes(120);
       }
 
-      // 2. Load subjects + colors
       const fullSubjectRes = await supabase
         .from("subjects")
         .select("name, color")
@@ -123,7 +120,6 @@ export default function Dashboard() {
       setColorBySubject(colors);
       setAvailableSubjects(subjectRows.map((s) => s.name));
 
-      // 3. Load study sessions (+ optional note)
       const fullSessionsRes = await supabase
         .from("study_sessions")
         .select("id, subject, duration, created_at, note")
@@ -144,7 +140,6 @@ export default function Dashboard() {
         setSessions((fullSessionsRes.data || []) as StudySession[]);
       }
 
-      // 4. Load upcoming exams (with seamless localStorage fallback before SQL setup)
       const examsRes = await supabase
         .from("exams")
         .select("id, title, subject, exam_date")
@@ -189,7 +184,7 @@ export default function Dashboard() {
       .eq("user_id", user.id);
 
     if (error) {
-      alert(`Goal save error: ${error.message}`);
+      toast.error("Could not save goal", error.message);
     }
   };
 
@@ -221,6 +216,7 @@ export default function Dashboard() {
       setExamDate("");
       setShowAddExam(false);
       setIsSavingExam(false);
+      toast.success("Exam countdown added!", cleanedTitle);
       return;
     }
 
@@ -390,16 +386,23 @@ export default function Dashboard() {
     return `${totalSeconds}s`;
   };
 
+  // Compact label for tight chart/calendar cells on mobile
+  const formatCompact = (totalSeconds: number) => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    if (hours > 0 && minutes > 0) return `${hours}h${minutes}m`;
+    if (hours > 0) return `${hours}h`;
+    if (minutes > 0) return `${minutes}m`;
+    return `${totalSeconds}s`;
+  };
+
   const dailyGoalSeconds = dailyGoalMinutes * 60;
   const dailyGoalProgress =
     dailyGoalSeconds > 0
       ? Math.min((todaySeconds / dailyGoalSeconds) * 100, 100)
       : 0;
 
-  const totalAllTimeSeconds = sessions.reduce(
-    (sum, s) => sum + s.duration,
-    0
-  );
+  const totalAllTimeSeconds = sessions.reduce((sum, s) => sum + s.duration, 0);
 
   const subjectTotals = sessions.reduce<Record<string, number>>(
     (totals, session) => {
@@ -466,7 +469,7 @@ export default function Dashboard() {
   };
 
   const calendarTitle = calendarDate.toLocaleString("en-US", {
-    month: "long",
+    month: "short",
     year: "numeric",
   });
 
@@ -527,101 +530,110 @@ export default function Dashboard() {
     { label: "Today", value: formatDuration(todaySeconds) },
     { label: "This week", value: formatDuration(weekSeconds) },
     { label: "This month", value: formatDuration(monthSeconds) },
-    { label: "Daily average", value: formatDuration(dailyAverageSeconds) },
+    { label: "Daily avg", value: formatDuration(dailyAverageSeconds) },
   ];
 
   if (isLoading) {
     return (
-      <main className="mx-auto w-full max-w-6xl px-6 py-10">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
-          <p className="text-white/60">Loading dashboard...</p>
+      <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-8 text-center">
+          <p className="text-sm text-white/55">Loading dashboard...</p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-6 py-10">
-      <section className="flex flex-wrap items-center justify-between gap-4">
+    <main className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 sm:py-10">
+      {/* HEADER */}
+      <section className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="mt-2 text-white/60">Here&apos;s your study progress.</p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            Dashboard
+          </h1>
+          <p className="mt-0.5 text-xs text-white/55 sm:text-sm">
+            Your study overview &amp; consistency.
+          </p>
         </div>
 
         <Link
           href="/timer"
-          className="rounded-xl bg-white px-5 py-3 font-semibold text-black transition hover:bg-white/90"
+          className="flex h-10 shrink-0 items-center rounded-xl bg-white px-4 text-xs font-semibold text-black transition hover:bg-white/90 sm:h-11 sm:px-5 sm:text-sm"
         >
           Start Studying
         </Link>
       </section>
 
-      <section className="mt-8 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+      {/* 2x2 MOBILE / 4-COL DESKTOP OVERVIEW METRICS */}
+      <section className="mt-5 grid grid-cols-2 gap-3 sm:mt-7 sm:gap-4 lg:grid-cols-4">
         {stats.map((stat) => (
           <article
             key={stat.label}
-            className="rounded-2xl border border-white/10 bg-white/5 p-6"
+            className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5"
           >
-            <p className="text-sm text-white/50">{stat.label}</p>
-            <p className="mt-3 text-3xl font-bold">{stat.value}</p>
+            <p className="text-xs font-medium text-white/50">{stat.label}</p>
+            <p className="mt-2 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">
+              {stat.value}
+            </p>
           </article>
         ))}
       </section>
 
-      {/* STREAKS & DAILY GOAL */}
-      <section className="mt-8 grid gap-6 lg:grid-cols-2">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <p className="text-sm text-white/50">Current streak</p>
-            <p className="mt-3 text-3xl font-bold">
-              {currentStreak} {currentStreak === 1 ? "day" : "days"} 🔥
+      {/* STREAKS (2-COL ON MOBILE) & DAILY GOAL */}
+      <section className="mt-4 grid gap-4 sm:mt-6 lg:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
+            <p className="text-xs font-medium text-white/50">Current streak</p>
+            <p className="mt-2 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">
+              {currentStreak}d 🔥
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <p className="text-sm text-white/50">Longest streak</p>
-            <p className="mt-3 text-3xl font-bold">
+          <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
+            <p className="text-xs font-medium text-white/50">Longest streak</p>
+            <p className="mt-2 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">
               {longestStreak} {longestStreak === 1 ? "day" : "days"}
             </p>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-          <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm text-white/50">Daily study goal</p>
-              <p className="mt-2 text-2xl font-bold">
-                {formatDuration(todaySeconds)} /{" "}
-                {formatDuration(dailyGoalSeconds)}
+              <p className="text-xs font-medium text-white/50">
+                Daily study goal
+              </p>
+              <p className="mt-1 text-lg font-bold tracking-tight tabular-nums sm:text-xl">
+                {formatDuration(todaySeconds)}{" "}
+                <span className="font-normal text-white/40">
+                  / {formatDuration(dailyGoalSeconds)}
+                </span>
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div>
-                <label className="mb-1 block text-xs text-white/50">
-                  Hours
-                </label>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#09090b] px-2.5 py-1.5">
                 <input
                   type="number"
                   min="0"
+                  aria-label="Goal hours"
                   value={Math.floor(dailyGoalMinutes / 60)}
                   onChange={(e) => {
                     const hours = Math.max(0, Number(e.target.value));
                     const minutes = dailyGoalMinutes % 60;
                     saveDailyGoal(hours * 60 + minutes);
                   }}
-                  className="w-20 rounded-xl border border-white/10 bg-black px-3 py-2.5 text-sm"
+                  className="w-8 bg-transparent text-center text-sm font-medium tabular-nums outline-none"
                 />
+                <span className="text-xs text-white/40">h</span>
               </div>
 
-              <div>
-                <label className="mb-1 block text-xs text-white/50">
-                  Minutes
-                </label>
+              <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#09090b] px-2.5 py-1.5">
                 <input
                   type="number"
                   min="0"
                   max="59"
+                  aria-label="Goal minutes"
                   value={dailyGoalMinutes % 60}
                   onChange={(e) => {
                     const minutes = Math.min(
@@ -631,31 +643,34 @@ export default function Dashboard() {
                     const hours = Math.floor(dailyGoalMinutes / 60);
                     saveDailyGoal(hours * 60 + minutes);
                   }}
-                  className="w-20 rounded-xl border border-white/10 bg-black px-3 py-2.5 text-sm"
+                  className="w-8 bg-transparent text-center text-sm font-medium tabular-nums outline-none"
                 />
+                <span className="text-xs text-white/40">m</span>
               </div>
             </div>
           </div>
 
-          <div className="mt-5 h-3 overflow-hidden rounded-full bg-white/10">
+          <div className="mt-3.5 h-2 overflow-hidden rounded-full bg-white/10">
             <div
-              className="h-full rounded-full bg-white transition-all"
+              className="h-full rounded-full bg-emerald-400 transition-all"
               style={{ width: `${dailyGoalProgress}%` }}
             />
           </div>
 
-          <p className="mt-2 text-sm text-white/50">
-            {Math.round(dailyGoalProgress)}% complete
+          <p className="mt-1.5 text-xs text-white/45">
+            {Math.round(dailyGoalProgress)}% complete today
           </p>
         </div>
       </section>
 
       {/* UPCOMING EXAMS COUNTDOWN WIDGET */}
-      <section className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <section className="mt-6 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:mt-8 sm:p-6">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-semibold">Upcoming Exams</h2>
-            <p className="mt-1 text-sm text-white/50">
+            <h2 className="text-base font-semibold sm:text-lg">
+              Upcoming Exams
+            </h2>
+            <p className="mt-0.5 text-xs text-white/50">
               Pin exam dates to keep your countdown in sight.
             </p>
           </div>
@@ -663,7 +678,7 @@ export default function Dashboard() {
           <button
             type="button"
             onClick={() => setShowAddExam((prev) => !prev)}
-            className="rounded-xl border border-white/20 px-4 py-2 text-sm font-medium transition hover:bg-white/5"
+            className="h-9 shrink-0 rounded-xl border border-white/15 px-3.5 text-xs font-medium transition hover:bg-white/5"
           >
             {showAddExam ? "Cancel" : "+ Add Exam"}
           </button>
@@ -672,7 +687,7 @@ export default function Dashboard() {
         {showAddExam && (
           <form
             onSubmit={handleAddExam}
-            className="mt-5 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-4"
+            className="mt-4 grid gap-2.5 border-t border-white/[0.08] pt-4 sm:grid-cols-4"
           >
             <input
               type="text"
@@ -681,13 +696,13 @@ export default function Dashboard() {
               placeholder="Exam title (e.g. Midterm)"
               required
               maxLength={80}
-              className="rounded-xl border border-white/10 bg-black px-4 py-2.5 text-sm outline-none"
+              className="h-10 rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none"
             />
 
             <select
               value={examSubject}
               onChange={(e) => setExamSubject(e.target.value)}
-              className="rounded-xl border border-white/10 bg-black px-4 py-2.5 text-sm outline-none"
+              className="h-10 rounded-xl border border-white/10 bg-[#09090b] px-3 text-sm outline-none"
             >
               <option value="">Subject (optional)</option>
               {availableSubjects.map((sub) => (
@@ -702,35 +717,34 @@ export default function Dashboard() {
               value={examDate}
               onChange={(e) => setExamDate(e.target.value)}
               required
-              className="rounded-xl border border-white/10 bg-black px-4 py-2.5 text-sm outline-none"
+              className="h-10 rounded-xl border border-white/10 bg-[#09090b] px-3 text-sm outline-none"
             />
 
             <button
               type="submit"
               disabled={isSavingExam}
-              className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+              className="h-10 rounded-xl bg-white px-4 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
             >
               {isSavingExam ? "Saving..." : "Save Exam"}
             </button>
           </form>
         )}
 
-        <div className="mt-5">
+        <div className="mt-4">
           {exams.length === 0 ? (
-            <p className="text-sm text-white/45">
+            <p className="text-xs text-white/45">
               No upcoming exams pinned yet.
             </p>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
               {exams.map((exam) => {
                 const daysLeft = getExamDaysRemaining(exam.exam_date);
                 const subjectDot = exam.subject
                   ? resolveSubjectColor(exam.subject, colorBySubject)
                   : null;
 
-                let badgeText = `${daysLeft} days left`;
-                let badgeClass =
-                  "border-white/15 bg-white/10 text-white/90";
+                let badgeText = `${daysLeft}d left`;
+                let badgeClass = "border-white/15 bg-white/10 text-white/90";
 
                 if (daysLeft < 0) {
                   badgeText = "Passed";
@@ -751,29 +765,31 @@ export default function Dashboard() {
                 return (
                   <div
                     key={exam.id}
-                    className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-black/40 p-4"
+                    className="flex items-start justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#09090b] p-3.5"
                   >
-                    <div>
-                      <p className="font-semibold">{exam.title}</p>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">
+                        {exam.title}
+                      </p>
                       {exam.subject && (
-                        <p className="mt-1 flex items-center gap-1.5 text-xs text-white/65">
+                        <p className="mt-1 flex items-center gap-1.5 text-xs text-white/60">
                           {subjectDot && (
                             <span
-                              className="h-2 w-2 rounded-full"
+                              className="h-2 w-2 shrink-0 rounded-full"
                               style={{ backgroundColor: subjectDot }}
                             />
                           )}
-                          <span>{exam.subject}</span>
+                          <span className="truncate">{exam.subject}</span>
                         </p>
                       )}
-                      <p className="mt-1 text-xs text-white/40">
+                      <p className="mt-1 text-[11px] text-white/40 tabular-nums">
                         {exam.exam_date}
                       </p>
                     </div>
 
-                    <div className="flex flex-col items-end gap-2">
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
                       <span
-                        className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badgeClass}`}
+                        className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${badgeClass}`}
                       >
                         {badgeText}
                       </span>
@@ -781,7 +797,7 @@ export default function Dashboard() {
                       <button
                         type="button"
                         onClick={() => handleDeleteExam(exam.id)}
-                        className="text-xs text-white/40 hover:text-red-400"
+                        className="text-[11px] text-white/40 hover:text-red-400"
                       >
                         Remove
                       </button>
@@ -795,111 +811,118 @@ export default function Dashboard() {
       </section>
 
       {/* WEEKLY CHART & MONTHLY CALENDAR */}
-      <section className="mt-10 grid gap-6 lg:grid-cols-2">
-        <div>
-          <h2 className="text-xl font-semibold">Study this week</h2>
+      <section className="mt-6 grid gap-5 sm:mt-8 lg:grid-cols-2">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
+          <h2 className="text-base font-semibold sm:text-lg">
+            Study this week
+          </h2>
 
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-6">
-            <div className="flex h-64 items-end justify-between gap-4">
-              {weekData.map(({ day: dayLabel, seconds, segments }) => {
-                const height = (seconds / maxDaySeconds) * 100;
+          <div className="mt-4 flex h-48 items-end justify-between gap-1.5 sm:h-56 sm:gap-3">
+            {weekData.map(({ day: dayLabel, seconds, segments }) => {
+              const height = (seconds / maxDaySeconds) * 100;
 
-                return (
-                  <div
-                    key={dayLabel}
-                    className="flex h-full flex-1 flex-col items-center justify-end gap-3"
-                  >
-                    <p className="text-xs text-white/70">
-                      {seconds > 0 ? formatDuration(seconds) : "0m"}
-                    </p>
+              return (
+                <div
+                  key={dayLabel}
+                  className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2"
+                >
+                  <p className="truncate text-[10px] text-white/65 tabular-nums sm:text-xs">
+                    {seconds > 0 ? formatCompact(seconds) : "0m"}
+                  </p>
 
-                    {seconds > 0 ? (
-                      <div
-                        className="flex w-full max-w-10 flex-col overflow-hidden rounded-t-lg"
-                        style={{ height: `${Math.max(height, 6)}%` }}
-                      >
-                        {segments.map((seg) => (
-                          <div
-                            key={seg.subject}
-                            title={`${seg.subject}: ${formatDuration(seg.seconds)}`}
-                            style={{
-                              height: `${(seg.seconds / seconds) * 100}%`,
-                              backgroundColor: seg.color,
-                            }}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div
-                        className="w-full max-w-10 rounded-t-lg bg-white/15"
-                        style={{ height: "2px" }}
-                      />
-                    )}
+                  {seconds > 0 ? (
+                    <div
+                      className="flex w-full max-w-7 flex-col overflow-hidden rounded-t-md sm:max-w-9"
+                      style={{ height: `${Math.max(height, 6)}%` }}
+                    >
+                      {segments.map((seg) => (
+                        <div
+                          key={seg.subject}
+                          title={`${seg.subject}: ${formatDuration(seg.seconds)}`}
+                          style={{
+                            height: `${(seg.seconds / seconds) * 100}%`,
+                            backgroundColor: seg.color,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div
+                      className="w-full max-w-7 rounded-t-md bg-white/12 sm:max-w-9"
+                      style={{ height: "2px" }}
+                    />
+                  )}
 
-                    <span className="text-sm text-white/50">{dayLabel}</span>
-                  </div>
-                );
-              })}
-            </div>
+                  <span className="text-[11px] text-white/45 sm:text-xs">
+                    {dayLabel}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        <div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-xl font-semibold">Study this month</h2>
+        <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold sm:text-lg">
+              Study calendar
+            </h2>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={previousMonth}
-                className="rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5"
+                aria-label="Previous month"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-xs hover:bg-white/5"
               >
                 ←
               </button>
 
-              <p className="min-w-32 text-center font-semibold">
+              <p className="min-w-24 text-center text-xs font-semibold sm:text-sm">
                 {calendarTitle}
               </p>
 
               <button
                 onClick={nextMonth}
-                className="rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5"
+                aria-label="Next month"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-xs hover:bg-white/5"
               >
                 →
               </button>
             </div>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="grid grid-cols-7 text-center text-xs text-white/50">
+          <div className="mt-3">
+            <div className="grid grid-cols-7 text-center text-[10px] font-medium text-white/45 sm:text-xs">
               {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-                <div key={d} className="py-2">
+                <div key={d} className="py-1.5">
                   {d}
                 </div>
               ))}
             </div>
 
-            <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-white/10">
+            <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-white/[0.08]">
               {calendarDays.map(
                 ({ date, seconds, topColor, isCurrentMonth }) => (
                   <div
                     key={date.toISOString()}
-                    className={`min-h-16 border-b border-r border-white/10 p-2 ${
+                    className={`flex min-h-12 flex-col justify-between border-b border-r border-white/[0.07] p-1 sm:min-h-15 sm:p-1.5 ${
                       isCurrentMonth
-                        ? "bg-white/3"
-                        : "bg-black/20 text-white/25"
+                        ? "bg-[#09090b]/60"
+                        : "bg-black/30 text-white/20"
                     }`}
                   >
-                    <p className="text-xs font-semibold">{date.getDate()}</p>
+                    <p className="text-[10px] font-medium tabular-nums sm:text-xs">
+                      {date.getDate()}
+                    </p>
 
                     {seconds > 0 && (
                       <div
-                        className="mt-2 inline-block rounded-md border px-1.5 py-0.5 text-[10px] font-medium text-white"
+                        className="truncate rounded px-1 py-0.5 text-center text-[9px] font-semibold leading-tight text-white tabular-nums sm:text-[10px]"
                         style={{
-                          borderColor: `${topColor || "#f97316"}66`,
-                          backgroundColor: `${topColor || "#f97316"}26`,
+                          backgroundColor: `${topColor || "#10b981"}33`,
                         }}
                       >
-                        {formatDuration(seconds)}
+                        {formatCompact(seconds)}
                       </div>
                     )}
                   </div>
@@ -911,30 +934,30 @@ export default function Dashboard() {
       </section>
 
       {/* COLOR-CODED STUDY BY SUBJECT */}
-      <section className="mt-10">
-        <h2 className="text-xl font-semibold">Study by subject</h2>
+      <section className="mt-6 sm:mt-8">
+        <h2 className="text-base font-semibold sm:text-lg">Study by subject</h2>
 
-        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
+        <div className="mt-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111113]">
           {subjectData.length === 0 ? (
-            <div className="bg-white/5 px-6 py-6 text-white/50">
+            <div className="px-5 py-6 text-xs text-white/50 sm:text-sm">
               No study data yet.
             </div>
           ) : (
             subjectData.map(({ subject, seconds, color, sharePercent }) => (
               <div
                 key={subject}
-                className="border-b border-white/10 bg-white/5 px-6 py-4 last:border-b-0"
+                className="border-b border-white/[0.07] px-4 py-3.5 last:border-b-0 sm:px-5"
               >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <div className="flex min-w-0 items-center gap-2.5">
                     <span
-                      className="h-3 w-3 shrink-0 rounded-full"
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
                       style={{ backgroundColor: color }}
                     />
-                    <p className="font-medium">{subject}</p>
+                    <p className="truncate font-medium">{subject}</p>
                   </div>
 
-                  <p className="font-semibold">
+                  <p className="shrink-0 font-semibold tabular-nums">
                     {formatDuration(seconds)}{" "}
                     <span className="ml-1 text-xs font-normal text-white/45">
                       ({sharePercent}%)
@@ -942,7 +965,7 @@ export default function Dashboard() {
                   </p>
                 </div>
 
-                <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
@@ -957,29 +980,31 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* ACHIEVEMENTS & BADGES */}
-      <section className="mt-10">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-xl font-semibold">Achievements 🏆</h2>
-          <p className="text-sm text-white/50">
+      {/* ACHIEVEMENTS & BADGES (2-COL ON MOBILE, 4-COL ON DESKTOP) */}
+      <section className="mt-6 sm:mt-8">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-base font-semibold sm:text-lg">
+            Achievements 🏆
+          </h2>
+          <p className="text-xs text-white/50 tabular-nums">
             {unlockedCount} / {achievements.length} unlocked
           </p>
         </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {achievements.map((badge) => (
             <div
               key={badge.id}
-              className={`rounded-2xl border p-5 transition ${
+              className={`rounded-2xl border p-3.5 transition sm:p-4 ${
                 badge.unlocked
-                  ? "border-amber-500/35 bg-amber-500/10"
-                  : "border-white/10 bg-white/5 opacity-55"
+                  ? "border-amber-500/35 bg-amber-500/[0.08]"
+                  : "border-white/[0.07] bg-[#111113] opacity-55"
               }`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-2xl">{badge.icon}</span>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-xl">{badge.icon}</span>
                 <span
-                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
                     badge.unlocked
                       ? "bg-amber-400/20 text-amber-200"
                       : "bg-white/10 text-white/55"
@@ -989,20 +1014,22 @@ export default function Dashboard() {
                 </span>
               </div>
 
-              <p className="mt-3 font-semibold">{badge.title}</p>
-              <p className="mt-1 text-xs text-white/65">{badge.description}</p>
+              <p className="mt-2.5 text-sm font-semibold">{badge.title}</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-white/60">
+                {badge.description}
+              </p>
             </div>
           ))}
         </div>
       </section>
 
       {/* RECENT SESSIONS */}
-      <section className="mt-10">
-        <h2 className="text-xl font-semibold">Recent sessions</h2>
+      <section className="mt-6 sm:mt-8">
+        <h2 className="text-base font-semibold sm:text-lg">Recent sessions</h2>
 
-        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
+        <div className="mt-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111113]">
           {sessions.length === 0 ? (
-            <div className="bg-white/5 px-6 py-6 text-white/50">
+            <div className="px-5 py-6 text-xs text-white/50 sm:text-sm">
               No study sessions yet.
             </div>
           ) : (
@@ -1015,27 +1042,29 @@ export default function Dashboard() {
               return (
                 <div
                   key={session.id}
-                  className="flex items-center justify-between border-b border-white/10 bg-white/5 px-6 py-4 last:border-b-0"
+                  className="flex items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-3.5 last:border-b-0 sm:px-5"
                 >
-                  <div>
-                    <div className="flex items-center gap-2.5">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
                         style={{ backgroundColor: dotColor }}
                       />
-                      <p className="font-medium">{session.subject}</p>
+                      <p className="truncate text-sm font-medium">
+                        {session.subject}
+                      </p>
                     </div>
                     {session.note && (
-                      <p className="mt-1 text-xs text-white/70">
+                      <p className="mt-0.5 truncate text-xs text-white/70">
                         {session.note}
                       </p>
                     )}
-                    <p className="mt-1 text-xs text-white/45">
+                    <p className="mt-0.5 text-[11px] text-white/40 tabular-nums">
                       {new Date(session.created_at).toLocaleString()}
                     </p>
                   </div>
 
-                  <p className="font-semibold">
+                  <p className="shrink-0 font-mono text-sm font-semibold tabular-nums">
                     {formatDuration(session.duration)}
                   </p>
                 </div>

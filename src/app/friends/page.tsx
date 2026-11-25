@@ -90,13 +90,9 @@ function getTimeBoundaries() {
   weekStart.setDate(now.getDate() - daysSinceMonday);
   weekStart.setHours(0, 0, 0, 0);
 
-  const streakWindowStart = new Date(todayStart);
-  streakWindowStart.setDate(todayStart.getDate() - 120);
-
   return {
     todayStart,
     weekStart,
-    streakWindowStart,
   };
 }
 
@@ -108,11 +104,9 @@ function formatDuration(totalSeconds: number) {
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
   }
-
   if (minutes > 0) {
     return `${minutes}m`;
   }
-
   return `${safeSeconds}s`;
 }
 
@@ -170,7 +164,6 @@ export default function FriendsPage() {
   const loadFriendsData = useCallback(async (userId: string) => {
     const { todayStart, weekStart } = getTimeBoundaries();
 
-    // 1. Load current user's profile with graceful column fallbacks
     let myProfile: ProfileRow | null = null;
 
     const fullProfileRes = await supabase
@@ -245,7 +238,6 @@ export default function FriendsPage() {
       }
     }
 
-    // 2. Load friendships (incoming, outgoing, accepted)
     const { data: friendshipRows, error: friendshipsError } = await supabase
       .from("friendships")
       .select("id, requester_id, addressee_id, status, created_at")
@@ -267,7 +259,6 @@ export default function FriendsPage() {
     const typedFriendships = (friendshipRows || []) as FriendshipRow[];
     setFriendships(typedFriendships);
 
-    // Fetch usernames + avatars + live status for everyone involved in friendships
     const otherUserIds = Array.from(
       new Set(
         typedFriendships.map((f) =>
@@ -336,7 +327,6 @@ export default function FriendsPage() {
     setUsernamesById(usernameMap);
     setAvatarsById(avatarMap);
 
-    // 3. Build daily/weekly leaderboard + streaks for you + accepted friends
     const acceptedFriendIds = typedFriendships
       .filter((f) => f.status === "accepted")
       .map((f) =>
@@ -549,7 +539,8 @@ export default function FriendsPage() {
     setMyUsername(cleaned);
     setUsernameInput(cleaned);
     setIsEditingUsername(false);
-    setUsernameMessage("Username saved!");
+    setUsernameMessage("");
+    toast.success("Username saved!", `@${cleaned}`);
     await loadFriendsData(currentUserId);
   };
 
@@ -590,7 +581,8 @@ export default function FriendsPage() {
       setHasProfileRow(true);
       setMyAvatarUrl(dataUrl);
       notifyAvatarUpdated(dataUrl);
-      setUsernameMessage("Profile picture updated!");
+      setUsernameMessage("");
+      toast.success("Profile picture updated!");
       await loadFriendsData(currentUserId);
     } catch (err) {
       setIsSavingAvatar(false);
@@ -636,8 +628,7 @@ export default function FriendsPage() {
       setIsSearching(false);
 
       if (fallbackSearch.error) {
-        console.error("User search error:", fallbackSearch.error);
-        alert("Could not search usernames.");
+        toast.error("Could not search usernames");
         return;
       }
 
@@ -648,8 +639,7 @@ export default function FriendsPage() {
     setIsSearching(false);
 
     if (fullSearch.error) {
-      console.error("User search error:", fullSearch.error);
-      alert("Could not search usernames.");
+      toast.error("Could not search usernames");
       return;
     }
 
@@ -721,7 +711,7 @@ export default function FriendsPage() {
       .select("id");
 
     if (error || !data || data.length === 0) {
-      alert("Could not remove friend request.");
+      toast.error("Could not remove friend");
       return;
     }
 
@@ -762,9 +752,9 @@ export default function FriendsPage() {
 
   if (isLoading) {
     return (
-      <main className="mx-auto w-full max-w-5xl px-6 py-10">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
-          <p className="text-white/60">Loading friends...</p>
+      <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-10">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-8 text-center">
+          <p className="text-sm text-white/55">Loading friends...</p>
         </div>
       </main>
     );
@@ -772,18 +762,16 @@ export default function FriendsPage() {
 
   if (setupRequired) {
     return (
-      <main className="mx-auto w-full max-w-4xl px-6 py-10">
-        <h1 className="text-3xl font-bold">Friends</h1>
-        <div className="mt-6 rounded-2xl border border-orange-500/30 bg-orange-500/10 p-6">
-          <h2 className="text-lg font-semibold text-orange-300">
+      <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-10">
+        <h1 className="text-2xl font-bold sm:text-3xl">Friends</h1>
+        <div className="mt-5 rounded-2xl border border-orange-500/30 bg-orange-500/10 p-5">
+          <h2 className="text-base font-semibold text-orange-300">
             One-time Supabase SQL setup required
           </h2>
-          <p className="mt-2 text-sm text-white/80">
-            To enable usernames, friend requests, and the study leaderboard,
-            open your <strong>Supabase Dashboard → SQL Editor</strong>, paste
-            the contents of <code>supabase-friends-setup.sql</code> from your
-            project folder, and click <strong>Run</strong>. Then refresh this
-            page.
+          <p className="mt-2 text-xs leading-relaxed text-white/80 sm:text-sm">
+            Open your <strong>Supabase Dashboard → SQL Editor</strong>, paste
+            the contents of <code>supabase-friends-setup.sql</code>, and click{" "}
+            <strong>Run</strong>. Then refresh this page.
           </p>
         </div>
       </main>
@@ -791,40 +779,43 @@ export default function FriendsPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-6 py-10">
+    <main className="mx-auto w-full max-w-4xl px-4 py-5 sm:px-6 sm:py-10">
       <div>
-        <h1 className="text-3xl font-bold">Friends</h1>
-        <p className="mt-2 text-white/60">
-          Add friends by username, see who is studying live, and compare daily
-          and weekly progress.
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          Friends
+        </h1>
+        <p className="mt-0.5 text-xs text-white/55 sm:text-sm">
+          See who is studying live and compare daily &amp; weekly progress.
         </p>
       </div>
 
       {/* YOUR PROFILE & USERNAME CARD */}
-      <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+      <section className="mt-5 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:mt-7 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3.5">
             <UserAvatar
               avatarUrl={myAvatarUrl}
               name={myUsername || "you"}
-              size="lg"
+              size="md"
             />
 
             <div>
-              <p className="text-sm text-white/50">Your profile</p>
+              <p className="text-[11px] font-medium text-white/45">
+                Your profile
+              </p>
               {myUsername && !isEditingUsername ? (
-                <p className="mt-0.5 font-mono text-xl font-bold">
+                <p className="font-mono text-base font-bold sm:text-lg">
                   @{myUsername}
                 </p>
               ) : (
-                <p className="mt-0.5 text-sm text-white/70">
-                  Choose a unique @username so friends can find and add you.
+                <p className="text-xs text-white/65">
+                  Choose a unique @username so friends can find you.
                 </p>
               )}
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             <input
               ref={avatarFileInputRef}
               type="file"
@@ -837,13 +828,13 @@ export default function FriendsPage() {
               type="button"
               disabled={isSavingAvatar}
               onClick={() => avatarFileInputRef.current?.click()}
-              className="rounded-lg border border-white/20 px-4 py-2 text-sm transition hover:bg-white/5 disabled:opacity-50"
+              className="h-9 rounded-xl border border-white/15 px-3 text-xs font-medium transition hover:bg-white/5 disabled:opacity-50"
             >
               {isSavingAvatar
                 ? "Uploading..."
                 : myAvatarUrl
                   ? "Change photo"
-                  : "Upload photo"}
+                  : "Add photo"}
             </button>
 
             {myUsername && !isEditingUsername && (
@@ -854,9 +845,9 @@ export default function FriendsPage() {
                   setUsernameMessage("");
                   setIsEditingUsername(true);
                 }}
-                className="rounded-lg border border-white/20 px-4 py-2 text-sm transition hover:bg-white/5"
+                className="h-9 rounded-xl border border-white/15 px-3 text-xs font-medium transition hover:bg-white/5"
               >
-                Change username
+                Edit @username
               </button>
             )}
           </div>
@@ -865,10 +856,10 @@ export default function FriendsPage() {
         {(!myUsername || isEditingUsername) && (
           <form
             onSubmit={handleSaveUsername}
-            className="mt-4 flex flex-col gap-3 sm:flex-row"
+            className="mt-3.5 flex flex-col gap-2.5 sm:flex-row"
           >
             <div className="relative flex-1">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/40">
+              <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-white/40">
                 @
               </span>
               <input
@@ -877,7 +868,7 @@ export default function FriendsPage() {
                 onChange={(e) => setUsernameInput(e.target.value)}
                 placeholder="your_username"
                 maxLength={24}
-                className="w-full rounded-xl border border-white/10 bg-black py-3 pl-9 pr-4 outline-none"
+                className="h-10 w-full rounded-xl border border-white/10 bg-[#09090b] pl-8 pr-3.5 text-sm outline-none"
               />
             </div>
 
@@ -885,9 +876,9 @@ export default function FriendsPage() {
               <button
                 type="submit"
                 disabled={isSavingUsername}
-                className="rounded-xl bg-white px-6 py-3 font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+                className="h-10 flex-1 rounded-xl bg-white px-5 text-xs font-semibold text-black transition hover:bg-white/90 disabled:opacity-50 sm:flex-none sm:text-sm"
               >
-                {isSavingUsername ? "Saving..." : "Save Username"}
+                {isSavingUsername ? "Saving..." : "Save"}
               </button>
 
               {myUsername && isEditingUsername && (
@@ -897,7 +888,7 @@ export default function FriendsPage() {
                     setIsEditingUsername(false);
                     setUsernameMessage("");
                   }}
-                  className="rounded-xl border border-white/10 px-4 py-3 text-sm text-white/70 hover:text-white"
+                  className="h-10 rounded-xl border border-white/10 px-3.5 text-xs text-white/70 hover:text-white"
                 >
                   Cancel
                 </button>
@@ -907,20 +898,20 @@ export default function FriendsPage() {
         )}
 
         {usernameMessage && (
-          <p className="mt-3 text-sm text-white/70">{usernameMessage}</p>
+          <p className="mt-2.5 text-xs text-white/70">{usernameMessage}</p>
         )}
       </section>
 
       {/* INCOMING & OUTGOING REQUESTS */}
       {(incomingRequests.length > 0 || outgoingRequests.length > 0) && (
-        <section className="mt-8 grid gap-6 md:grid-cols-2">
+        <section className="mt-5 grid gap-4 sm:mt-6 md:grid-cols-2">
           {incomingRequests.length > 0 && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-lg font-semibold">
+            <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
+              <h2 className="text-sm font-semibold sm:text-base">
                 Friend requests ({incomingRequests.length})
               </h2>
 
-              <div className="mt-4 space-y-3">
+              <div className="mt-3 space-y-2.5">
                 {incomingRequests.map((req) => {
                   const senderName =
                     usernamesById[req.requester_id] || "student";
@@ -928,30 +919,30 @@ export default function FriendsPage() {
                   return (
                     <div
                       key={req.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-3"
+                      className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-[#09090b] px-3.5 py-2.5"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-2.5">
                         <UserAvatar
                           avatarUrl={avatarsById[req.requester_id]}
                           name={senderName}
-                          size="sm"
+                          size="xs"
                         />
-                        <span className="font-mono font-medium">
+                        <span className="truncate font-mono text-xs font-medium sm:text-sm">
                           @{senderName}
                         </span>
                       </div>
 
-                      <div className="flex gap-2">
+                      <div className="flex shrink-0 gap-1.5">
                         <button
                           onClick={() => acceptFriendRequest(req.id)}
-                          className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-1.5 text-sm text-green-400 transition hover:bg-green-500/20"
+                          className="h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/15 px-3 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/25"
                         >
                           Accept
                         </button>
 
                         <button
                           onClick={() => removeFriendship(req.id)}
-                          className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-white/60 transition hover:text-white"
+                          className="h-8 rounded-lg border border-white/10 px-2.5 text-xs text-white/60 transition hover:text-white"
                         >
                           Decline
                         </button>
@@ -964,12 +955,12 @@ export default function FriendsPage() {
           )}
 
           {outgoingRequests.length > 0 && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-lg font-semibold">
+            <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
+              <h2 className="text-sm font-semibold sm:text-base">
                 Sent requests ({outgoingRequests.length})
               </h2>
 
-              <div className="mt-4 space-y-3">
+              <div className="mt-3 space-y-2.5">
                 {outgoingRequests.map((req) => {
                   const recipientName =
                     usernamesById[req.addressee_id] || "student";
@@ -977,22 +968,22 @@ export default function FriendsPage() {
                   return (
                     <div
                       key={req.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-3"
+                      className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-[#09090b] px-3.5 py-2.5"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-2.5">
                         <UserAvatar
                           avatarUrl={avatarsById[req.addressee_id]}
                           name={recipientName}
-                          size="sm"
+                          size="xs"
                         />
-                        <span className="font-mono text-white/80">
+                        <span className="truncate font-mono text-xs text-white/80 sm:text-sm">
                           @{recipientName}
                         </span>
                       </div>
 
                       <button
                         onClick={() => removeFriendship(req.id)}
-                        className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-white/60 transition hover:text-white"
+                        className="h-8 shrink-0 rounded-lg border border-white/10 px-3 text-xs text-white/60 transition hover:text-white"
                       >
                         Cancel
                       </button>
@@ -1006,37 +997,31 @@ export default function FriendsPage() {
       )}
 
       {/* FIND FRIENDS BY USERNAME */}
-      <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
-        <h2 className="text-lg font-semibold">Add a friend</h2>
-        <p className="mt-1 text-sm text-white/50">
-          Search by @username to send a friend request.
-        </p>
+      <section className="mt-5 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:mt-6 sm:p-5">
+        <h2 className="text-sm font-semibold sm:text-base">Add a friend</h2>
 
-        <form
-          onSubmit={handleSearchUsers}
-          className="mt-4 flex flex-col gap-3 sm:flex-row"
-        >
+        <form onSubmit={handleSearchUsers} className="mt-3 flex gap-2">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search @username..."
-            className="flex-1 rounded-xl border border-white/10 bg-black px-4 py-3 outline-none"
+            className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-[#09090b] px-3.5 text-sm outline-none focus:border-white/25"
           />
 
           <button
             type="submit"
             disabled={isSearching}
-            className="rounded-xl bg-white px-6 py-3 font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+            className="h-10 shrink-0 rounded-xl bg-white px-5 text-xs font-semibold text-black transition hover:bg-white/90 disabled:opacity-50 sm:text-sm"
           >
-            {isSearching ? "Searching..." : "Search"}
+            {isSearching ? "..." : "Search"}
           </button>
         </form>
 
         {hasSearched && (
-          <div className="mt-4 space-y-2">
+          <div className="mt-3 space-y-2">
             {searchResults.length === 0 ? (
-              <p className="py-2 text-sm text-white/50">
+              <p className="py-1.5 text-xs text-white/50">
                 No users found matching that username.
               </p>
             ) : (
@@ -1046,15 +1031,15 @@ export default function FriendsPage() {
                 return (
                   <div
                     key={profile.user_id}
-                    className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-black/40 px-4 py-3"
+                    className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#09090b] px-3.5 py-2.5"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
                       <UserAvatar
                         avatarUrl={profile.avatar_url}
                         name={profile.username}
-                        size="sm"
+                        size="xs"
                       />
-                      <span className="font-mono font-medium">
+                      <span className="truncate font-mono text-xs font-medium sm:text-sm">
                         @{profile.username}
                       </span>
                     </div>
@@ -1062,22 +1047,24 @@ export default function FriendsPage() {
                     {!relation ? (
                       <button
                         onClick={() => sendFriendRequest(profile.user_id)}
-                        className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90"
+                        className="h-8 shrink-0 rounded-lg bg-white px-3.5 text-xs font-semibold text-black transition hover:bg-white/90"
                       >
                         Add Friend
                       </button>
                     ) : relation.status === "accepted" ? (
-                      <span className="text-sm text-green-400">Friends ✓</span>
+                      <span className="shrink-0 text-xs font-medium text-emerald-400">
+                        Friends ✓
+                      </span>
                     ) : relation.requester_id === currentUserId ? (
-                      <span className="text-sm text-white/50">
-                        Request sent
+                      <span className="shrink-0 text-xs text-white/45">
+                        Sent
                       </span>
                     ) : (
                       <button
                         onClick={() => acceptFriendRequest(relation.id)}
-                        className="rounded-lg border border-green-500/20 bg-green-500/10 px-4 py-2 text-sm text-green-400 transition hover:bg-green-500/20"
+                        className="h-8 shrink-0 rounded-lg border border-emerald-500/25 bg-emerald-500/15 px-3 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/25"
                       >
-                        Accept Request
+                        Accept
                       </button>
                     )}
                   </div>
@@ -1089,29 +1076,29 @@ export default function FriendsPage() {
       </section>
 
       {/* DAILY & WEEKLY LEADERBOARD */}
-      <section className="mt-10">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <section className="mt-6 sm:mt-8">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-semibold">
+            <h2 className="text-base font-semibold sm:text-lg">
               {leaderboardPeriod === "today"
                 ? "Daily Leaderboard"
                 : "Weekly Leaderboard"}
             </h2>
-            <p className="mt-1 text-sm text-white/50">
+            <p className="mt-0.5 text-xs text-white/45">
               {leaderboardPeriod === "today"
                 ? "Ranked by study time today"
-                : "Resets every Monday · Ranked by study time this week"}
+                : "Resets Monday · Ranked by weekly hours"}
             </p>
           </div>
 
-          <div className="inline-flex rounded-xl border border-white/10 bg-white/5 p-1">
+          <div className="inline-flex h-9 shrink-0 items-center rounded-xl border border-white/10 bg-[#111113] p-1">
             <button
               type="button"
               onClick={() => setLeaderboardPeriod("today")}
-              className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${
+              className={`h-7 rounded-lg px-3 text-xs font-semibold transition ${
                 leaderboardPeriod === "today"
                   ? "bg-white text-black"
-                  : "text-white/65 hover:text-white"
+                  : "text-white/60 hover:text-white"
               }`}
             >
               Daily
@@ -1119,10 +1106,10 @@ export default function FriendsPage() {
             <button
               type="button"
               onClick={() => setLeaderboardPeriod("week")}
-              className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${
+              className={`h-7 rounded-lg px-3 text-xs font-semibold transition ${
                 leaderboardPeriod === "week"
                   ? "bg-white text-black"
-                  : "text-white/65 hover:text-white"
+                  : "text-white/60 hover:text-white"
               }`}
             >
               Weekly
@@ -1130,10 +1117,12 @@ export default function FriendsPage() {
           </div>
         </div>
 
-        <div className="mt-4 space-y-3">
+        <div className="mt-3.5 space-y-3">
           {sortedLeaderboard.length === 0 ? (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
-              <p className="text-white/60">No study activity yet.</p>
+            <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-8 text-center">
+              <p className="text-xs text-white/55 sm:text-sm">
+                No study activity yet.
+              </p>
             </div>
           ) : (
             sortedLeaderboard.map((entry, index) => {
@@ -1168,101 +1157,72 @@ export default function FriendsPage() {
               return (
                 <div
                   key={entry.user_id}
-                  className={`rounded-2xl border p-5 ${
+                  className={`rounded-2xl border p-4 sm:p-5 ${
                     entry.is_self
-                      ? "border-white/30 bg-white/10"
-                      : "border-white/10 bg-white/5"
+                      ? "border-white/25 bg-[#151518]"
+                      : "border-white/[0.08] bg-[#111113]"
                   }`}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                      <span className="w-7 text-center text-xl font-bold">
-                        {medal}
-                      </span>
+                  {/* Top Row: Identity + Desktop Stats + Remove */}
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="w-6 shrink-0 text-center text-base font-bold sm:text-lg">
+                          {medal}
+                        </span>
 
-                      <UserAvatar
-                        avatarUrl={entry.avatar_url}
-                        name={entry.username}
-                        size="md"
-                      />
+                        <UserAvatar
+                          avatarUrl={entry.avatar_url}
+                          name={entry.username}
+                          size="sm"
+                        />
 
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-lg font-bold">
-                            @{entry.username}
-                          </span>
-                          {entry.is_self && (
-                            <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-medium text-white/90">
-                              You
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="truncate font-mono text-sm font-bold sm:text-base">
+                              @{entry.username}
                             </span>
-                          )}
-                          {entry.current_streak > 0 && (
-                            <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2.5 py-0.5 text-xs font-semibold text-orange-300">
-                              🔥 {entry.current_streak}d
-                            </span>
-                          )}
-                          {entry.unlocked_badges.length > 0 && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-xs">
-                              {entry.unlocked_badges.map((b) => (
-                                <span
-                                  key={b.id}
-                                  title={`${b.title} — ${b.description}`}
-                                >
-                                  {b.icon}
-                                </span>
-                              ))}
-                            </span>
+                            {entry.is_self && (
+                              <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/90">
+                                You
+                              </span>
+                            )}
+                            {entry.current_streak > 0 && (
+                              <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold text-orange-300 tabular-nums">
+                                🔥 {entry.current_streak}d
+                              </span>
+                            )}
+                            {entry.unlocked_badges.length > 0 && (
+                              <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[11px]">
+                                {entry.unlocked_badges.map((b) => (
+                                  <span
+                                    key={b.id}
+                                    title={`${b.title} — ${b.description}`}
+                                  >
+                                    {b.icon}
+                                  </span>
+                                ))}
+                              </span>
+                            )}
+                          </div>
+
+                          {isStudyingNow && entry.studying_started_at && (
+                            <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300 tabular-nums">
+                              <span className="relative flex h-1.5 w-1.5">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                              </span>
+                              <span className="truncate">
+                                Studying{" "}
+                                <strong>{entry.studying_subject}</strong> ·{" "}
+                                {formatLiveElapsed(
+                                  entry.studying_started_at,
+                                  nowMs
+                                )}
+                              </span>
+                            </div>
                           )}
                         </div>
-
-                        {isStudyingNow && entry.studying_started_at && (
-                          <div className="mt-1.5 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-300">
-                            <span className="relative flex h-2 w-2">
-                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                            </span>
-                            <span>
-                              Studying <strong>{entry.studying_subject}</strong>{" "}
-                              ·{" "}
-                              {formatLiveElapsed(
-                                entry.studying_started_at,
-                                nowMs
-                              )}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 sm:gap-5">
-                      <div
-                        className={`rounded-xl border px-3.5 py-2 text-right transition ${
-                          leaderboardPeriod === "today"
-                            ? "border-white/25 bg-white/10"
-                            : "border-white/10 bg-black/30"
-                        }`}
-                      >
-                        <p className="text-[11px] uppercase tracking-wide text-white/50">
-                          Today
-                        </p>
-                        <p className="font-mono text-lg font-bold sm:text-xl">
-                          {formatDuration(entry.today_seconds)}
-                        </p>
-                      </div>
-
-                      <div
-                        className={`rounded-xl border px-3.5 py-2 text-right transition ${
-                          leaderboardPeriod === "week"
-                            ? "border-white/25 bg-white/10"
-                            : "border-white/10 bg-black/30"
-                        }`}
-                      >
-                        <p className="text-[11px] uppercase tracking-wide text-white/50">
-                          This week
-                        </p>
-                        <p className="font-mono text-lg font-bold sm:text-xl">
-                          {formatDuration(entry.week_seconds)}
-                        </p>
                       </div>
 
                       {!entry.is_self && relation && (
@@ -1273,7 +1233,56 @@ export default function FriendsPage() {
                               `Remove @${entry.username} from your friends?`
                             )
                           }
-                          className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/50 transition hover:border-red-500/30 hover:text-red-400"
+                          className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/45 transition hover:border-red-500/30 hover:text-red-400 sm:hidden"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Symmetrical 50/50 Grid on Mobile, Compact Pair on Desktop */}
+                    <div className="flex items-center gap-2.5">
+                      <div className="grid flex-1 grid-cols-2 gap-2 sm:flex sm:flex-none">
+                        <div
+                          className={`rounded-xl border px-3 py-1.5 text-left sm:min-w-24 sm:text-right ${
+                            leaderboardPeriod === "today"
+                              ? "border-white/20 bg-white/[0.08]"
+                              : "border-white/[0.07] bg-[#09090b]"
+                          }`}
+                        >
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-white/45">
+                            Today
+                          </p>
+                          <p className="font-mono text-sm font-bold tabular-nums sm:text-base">
+                            {formatDuration(entry.today_seconds)}
+                          </p>
+                        </div>
+
+                        <div
+                          className={`rounded-xl border px-3 py-1.5 text-left sm:min-w-24 sm:text-right ${
+                            leaderboardPeriod === "week"
+                              ? "border-white/20 bg-white/[0.08]"
+                              : "border-white/[0.07] bg-[#09090b]"
+                          }`}
+                        >
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-white/45">
+                            This week
+                          </p>
+                          <p className="font-mono text-sm font-bold tabular-nums sm:text-base">
+                            {formatDuration(entry.week_seconds)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {!entry.is_self && relation && (
+                        <button
+                          onClick={() =>
+                            removeFriendship(
+                              relation.id,
+                              `Remove @${entry.username} from your friends?`
+                            )
+                          }
+                          className="hidden h-8 shrink-0 rounded-lg border border-white/10 px-2.5 text-xs text-white/45 transition hover:border-red-500/30 hover:text-red-400 sm:inline-flex sm:items-center"
                         >
                           Remove
                         </button>
@@ -1281,28 +1290,30 @@ export default function FriendsPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+                  {/* Progress bar */}
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
                     <div
                       className="h-full rounded-full bg-white transition-all"
                       style={{ width: `${progressPercent}%` }}
                     />
                   </div>
 
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {/* Subjects studied */}
+                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                     {activeSubjects.length === 0 ? (
-                      <span className="text-xs text-white/40">
+                      <span className="text-[11px] text-white/35">
                         {leaderboardPeriod === "today"
-                          ? "No sessions logged yet today"
-                          : "No sessions logged yet this week"}
+                          ? "No sessions logged today"
+                          : "No sessions logged this week"}
                       </span>
                     ) : (
                       activeSubjects.map((item) => (
                         <span
                           key={item.subject}
-                          className="rounded-lg border border-white/10 bg-black/40 px-2.5 py-1 text-xs text-white/80"
+                          className="rounded-lg border border-white/[0.08] bg-[#09090b] px-2 py-0.5 text-[11px] text-white/75 tabular-nums"
                         >
                           {item.subject} ·{" "}
-                          <span className="font-semibold">
+                          <span className="font-semibold text-white">
                             {formatDuration(item.seconds)}
                           </span>
                         </span>
@@ -1316,7 +1327,7 @@ export default function FriendsPage() {
         </div>
 
         {sortedLeaderboard.length === 1 && (
-          <p className="mt-4 text-center text-sm text-white/50">
+          <p className="mt-4 text-center text-xs text-white/45">
             Search for a friend&apos;s @username above to add them to your
             leaderboard!
           </p>

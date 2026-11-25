@@ -1,6 +1,7 @@
 "use client";
 
 import { Capacitor } from "@capacitor/core";
+import { StatusBar, Style } from "@capacitor/status-bar";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -68,7 +69,12 @@ export default function Navbar() {
     };
 
     const checkUser = async () => {
-      setIsNativeApp(Capacitor.isNativePlatform());
+      const native = Capacitor.isNativePlatform();
+      setIsNativeApp(native);
+      if (native) {
+        StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
+        StatusBar.setBackgroundColor({ color: "#09090b" }).catch(() => {});
+      }
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -131,6 +137,20 @@ export default function Navbar() {
     router.refresh();
   };
 
+  const desktopLinks = isLoggedIn
+    ? [
+        { href: "/dashboard", label: "Dashboard" },
+        { href: "/timer", label: "Timer" },
+        { href: "/subject", label: "Subjects" },
+        { href: "/history", label: "History" },
+        { href: "/friends", label: "Friends" },
+        ...(!isNativeApp ? [{ href: "/download", label: "App" }] : []),
+      ]
+    : [
+        { href: "/timer", label: "Timer" },
+        ...(!isNativeApp ? [{ href: "/download", label: "Download App" }] : []),
+      ];
+
   const mobileTabs = isLoggedIn
     ? [
         {
@@ -144,12 +164,12 @@ export default function Navbar() {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-5 w-5"
+              className="h-[18px] w-[18px]"
             >
-              <rect x="3" y="3" width="7" height="9" rx="1" />
-              <rect x="14" y="3" width="7" height="5" rx="1" />
-              <rect x="14" y="12" width="7" height="9" rx="1" />
-              <rect x="3" y="16" width="7" height="5" rx="1" />
+              <rect x="3" y="3" width="7" height="9" rx="1.5" />
+              <rect x="14" y="3" width="7" height="5" rx="1.5" />
+              <rect x="14" y="12" width="7" height="9" rx="1.5" />
+              <rect x="3" y="16" width="7" height="5" rx="1.5" />
             </svg>
           ),
         },
@@ -164,7 +184,7 @@ export default function Navbar() {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-5 w-5"
+              className="h-[18px] w-[18px]"
             >
               <circle cx="12" cy="13" r="8" />
               <path d="M12 9v4l2.5 2.5" />
@@ -183,7 +203,7 @@ export default function Navbar() {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-5 w-5"
+              className="h-[18px] w-[18px]"
             >
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
@@ -201,7 +221,7 @@ export default function Navbar() {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-5 w-5"
+              className="h-[18px] w-[18px]"
             >
               <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
               <path d="M3 3v5h5" />
@@ -220,7 +240,7 @@ export default function Navbar() {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-5 w-5"
+              className="h-[18px] w-[18px]"
             >
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
@@ -242,7 +262,7 @@ export default function Navbar() {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-5 w-5"
+              className="h-[18px] w-[18px]"
             >
               <circle cx="12" cy="13" r="8" />
               <path d="M12 9v4l2.5 2.5" />
@@ -261,7 +281,7 @@ export default function Navbar() {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-5 w-5"
+              className="h-[18px] w-[18px]"
             >
               <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
               <polyline points="10 17 15 12 10 7" />
@@ -280,7 +300,7 @@ export default function Navbar() {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-5 w-5"
+              className="h-[18px] w-[18px]"
             >
               <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
               <circle cx="8.5" cy="7" r="4" />
@@ -296,7 +316,7 @@ export default function Navbar() {
       type="button"
       onClick={() => setBellOpen((prev) => !prev)}
       aria-label="Notifications"
-      className="relative rounded-xl border border-white/15 p-2 text-white/80 transition hover:bg-white/5 hover:text-white"
+      className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-white/[0.03] text-white/80 transition hover:bg-white/[0.08] hover:text-white"
     >
       <svg
         viewBox="0 0 24 24"
@@ -312,7 +332,7 @@ export default function Navbar() {
       </svg>
 
       {unreadCount > 0 && (
-        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-400 px-1 text-[10px] font-bold text-black">
+        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-400 px-1 text-[10px] font-bold text-black">
           {unreadCount > 9 ? "9+" : unreadCount}
         </span>
       )}
@@ -321,183 +341,147 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0a0a0a]/95 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-[#09090b]/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
         <nav
           ref={bellContainerRef}
-          className="relative mx-auto max-w-6xl px-6 py-3.5 md:py-4"
+          className="relative mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6 md:h-16"
         >
-          <div className="flex items-center justify-between">
-            <Link href="/" className="text-xl font-bold">
-              StudyTracker
-            </Link>
-
-            {/* Desktop navigation */}
-            <div className="hidden items-center gap-6 md:flex">
-              {isLoggedIn && (
-                <Link
-                  href="/dashboard"
-                  className={
-                    isActive("/dashboard")
-                      ? "font-semibold text-white"
-                      : "text-white/70 transition hover:text-white"
-                  }
-                >
-                  Dashboard
-                </Link>
-              )}
-
-              <Link
-                href="/timer"
-                className={
-                  isActive("/timer")
-                    ? "font-semibold text-white"
-                    : "text-white/70 transition hover:text-white"
-                }
+          {/* Brand Logo */}
+          <Link
+            href={isNativeApp && isLoggedIn ? "/dashboard" : "/"}
+            className="flex items-center gap-2 text-base font-bold tracking-tight sm:text-lg"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3.5 w-3.5"
               >
-                Timer
-              </Link>
+                <circle cx="12" cy="13" r="8" />
+                <path d="M12 9v4l2.5 2" />
+                <path d="M10 2h4" />
+              </svg>
+            </span>
+            <span>StudyTracker</span>
+          </Link>
 
-              {!isNativeApp && (
+          {/* Desktop Center Pill Navigation */}
+          <div className="hidden items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.03] p-1 md:flex">
+            {desktopLinks.map((link) => {
+              const active = isActive(link.href);
+              return (
                 <Link
-                  href="/download"
-                  className={
-                    isActive("/download")
-                      ? "font-semibold text-white"
-                      : "text-white/70 transition hover:text-white"
-                  }
-                >
-                  Download
-                </Link>
-              )}
-
-              {isLoggedIn && (
-                <>
-                  <Link
-                    href="/subject"
-                    className={
-                      isActive("/subject")
-                        ? "font-semibold text-white"
-                        : "text-white/70 transition hover:text-white"
-                    }
-                  >
-                    Subjects
-                  </Link>
-                  <Link
-                    href="/history"
-                    className={
-                      isActive("/history")
-                        ? "font-semibold text-white"
-                        : "text-white/70 transition hover:text-white"
-                    }
-                  >
-                    History
-                  </Link>
-                  <Link
-                    href="/friends"
-                    className={
-                      isActive("/friends")
-                        ? "font-semibold text-white"
-                        : "text-white/70 transition hover:text-white"
-                    }
-                  >
-                    Friends
-                  </Link>
-
-                  {renderBellButton()}
-
-                  <Link
-                    href="/settings"
-                    className={`flex items-center gap-2 ${
-                      isActive("/settings")
-                        ? "font-semibold text-white"
-                        : "text-white/70 transition hover:text-white"
-                    }`}
-                  >
-                    <UserAvatar
-                      avatarUrl={avatarUrl}
-                      name={displayName}
-                      size="xs"
-                    />
-                    <span>Settings</span>
-                  </Link>
-                </>
-              )}
-
-              {isLoggedIn ? (
-                <button
-                  onClick={handleLogout}
-                  className="rounded-lg border border-white/20 px-4 py-2 transition hover:bg-white/5"
-                >
-                  Logout
-                </button>
-              ) : (
-                <>
-                  <Link
-                    href="/login"
-                    className="rounded-lg border border-white/20 px-4 py-2 transition hover:bg-white/5"
-                  >
-                    Login
-                  </Link>
-
-                  <Link
-                    href="/register"
-                    className="rounded-lg bg-white px-4 py-2 font-medium text-black transition hover:bg-white/90"
-                  >
-                    Sign Up
-                  </Link>
-                </>
-              )}
-            </div>
-
-            {/* Mobile top right actions (Get App + Bell + Avatar + Logout) */}
-            <div className="flex items-center gap-2 md:hidden">
-              {!isNativeApp && (
-                <Link
-                  href="/download"
-                  className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-                    isActive("/download")
-                      ? "border-white/40 bg-white/15 text-white"
-                      : "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
+                  key={link.href}
+                  href={link.href}
+                  className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
+                    active
+                      ? "bg-white text-black shadow-sm"
+                      : "text-white/65 hover:text-white"
                   }`}
                 >
-                  App
+                  {link.label}
                 </Link>
-              )}
+              );
+            })}
+          </div>
 
-              {isLoggedIn && (
-                <>
-                  {renderBellButton()}
+          {/* Desktop Right Actions */}
+          <div className="hidden items-center gap-2.5 md:flex">
+            {isLoggedIn ? (
+              <>
+                {renderBellButton()}
 
-                  <Link
-                    href="/settings"
-                    aria-label="Account Settings"
-                    className={`rounded-full p-0.5 transition ${
-                      isActive("/settings") ? "ring-2 ring-white" : ""
-                    }`}
-                  >
-                    <UserAvatar
-                      avatarUrl={avatarUrl}
-                      name={displayName}
-                      size="xs"
-                    />
-                  </Link>
+                <Link
+                  href="/settings"
+                  className={`flex h-8 items-center gap-2 rounded-full border px-2.5 text-xs font-medium transition ${
+                    isActive("/settings")
+                      ? "border-white/30 bg-white/10 text-white"
+                      : "border-white/12 bg-white/[0.03] text-white/80 hover:bg-white/[0.08] hover:text-white"
+                  }`}
+                >
+                  <UserAvatar
+                    avatarUrl={avatarUrl}
+                    name={displayName}
+                    size="xs"
+                    className="!h-5 !w-5 !text-[10px]"
+                  />
+                  <span>Settings</span>
+                </Link>
 
-                  <button
-                    onClick={handleLogout}
-                    className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/80 active:bg-white/10"
-                  >
-                    Logout
-                  </button>
-                </>
-              )}
-            </div>
+                <button
+                  onClick={handleLogout}
+                  className="h-8 rounded-full border border-white/12 px-3.5 text-xs font-medium text-white/70 transition hover:border-white/25 hover:text-white"
+                >
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="flex h-8 items-center rounded-full border border-white/15 px-4 text-xs font-medium text-white/85 transition hover:bg-white/5"
+                >
+                  Login
+                </Link>
+
+                <Link
+                  href="/register"
+                  className="flex h-8 items-center rounded-full bg-white px-4 text-xs font-semibold text-black transition hover:bg-white/90"
+                >
+                  Sign Up
+                </Link>
+              </>
+            )}
+          </div>
+
+          {/* Mobile Top Right Actions (Clean & Uncluttered) */}
+          <div className="flex items-center gap-2 md:hidden">
+            {!isNativeApp && (
+              <Link
+                href="/download"
+                className={`flex h-8 items-center rounded-full border px-3 text-xs font-medium transition ${
+                  isActive("/download")
+                    ? "border-white/35 bg-white/15 text-white"
+                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                }`}
+              >
+                App
+              </Link>
+            )}
+
+            {isLoggedIn && (
+              <>
+                {renderBellButton()}
+
+                <Link
+                  href="/settings"
+                  aria-label="Account Settings"
+                  className={`rounded-full p-0.5 transition ${
+                    isActive("/settings") ? "ring-2 ring-white" : ""
+                  }`}
+                >
+                  <UserAvatar
+                    avatarUrl={avatarUrl}
+                    name={displayName}
+                    size="xs"
+                    className="!h-7 !w-7"
+                  />
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Notification Bell Dropdown */}
           {bellOpen && isLoggedIn && (
-            <div className="absolute right-4 top-full z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-2xl border border-white/15 bg-[#111111] shadow-2xl md:right-6">
-              <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-                <span className="text-sm font-semibold">Notifications</span>
+            <div className="absolute right-4 top-full z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-2xl border border-white/12 bg-[#111113] shadow-2xl sm:right-6">
+              <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
+                <span className="text-xs font-semibold tracking-wide uppercase text-white/75">
+                  Notifications
+                </span>
 
                 <div className="flex items-center gap-3 text-xs">
                   {unreadCount > 0 && (
@@ -521,7 +505,7 @@ export default function Navbar() {
                 </div>
               </div>
 
-              <div className="max-h-80 overflow-y-auto">
+              <div className="max-h-72 overflow-y-auto">
                 {notifications.length === 0 ? (
                   <p className="px-4 py-8 text-center text-xs text-white/45">
                     No notifications right now.
@@ -535,11 +519,11 @@ export default function Navbar() {
                         markAsRead(item.id);
                         setBellOpen(false);
                       }}
-                      className={`flex items-start gap-3 border-b border-white/5 px-4 py-3 transition hover:bg-white/5 last:border-b-0 ${
-                        item.read ? "opacity-70" : "bg-white/[0.03]"
+                      className={`flex items-start gap-3 border-b border-white/[0.05] px-4 py-3 transition hover:bg-white/[0.04] last:border-b-0 ${
+                        item.read ? "opacity-65" : "bg-white/[0.02]"
                       }`}
                     >
-                      <span className="mt-0.5 text-lg">{item.icon}</span>
+                      <span className="mt-0.5 text-base">{item.icon}</span>
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
@@ -562,13 +546,13 @@ export default function Navbar() {
                 )}
               </div>
 
-              <div className="border-t border-white/10 bg-black/40 px-4 py-2.5 text-right">
+              <div className="border-t border-white/[0.08] bg-black/40 px-4 py-2.5 text-right">
                 <Link
                   href="/settings"
                   onClick={() => setBellOpen(false)}
                   className="text-xs text-white/65 hover:text-white"
                 >
-                  Reminder & notification settings →
+                  Reminder &amp; notification settings →
                 </Link>
               </div>
             </div>
@@ -576,12 +560,16 @@ export default function Navbar() {
         </nav>
       </header>
 
-      {/* App-style Mobile Bottom Navigation Bar */}
+      {/* Equal-Grid Mobile Bottom Navigation Bar */}
       <nav
         aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#0a0a0a]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
+        className="fixed inset-x-0 bottom-0 z-50 border-t border-white/[0.08] bg-[#09090b]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
       >
-        <div className="mx-auto flex max-w-md items-center justify-around px-2 py-2">
+        <div
+          className={`mx-auto grid h-16 max-w-md items-center px-1 ${
+            isLoggedIn ? "grid-cols-5" : "grid-cols-3"
+          }`}
+        >
           {mobileTabs.map((tab) => {
             const active = isActive(tab.href);
 
@@ -589,13 +577,13 @@ export default function Navbar() {
               <Link
                 key={tab.href}
                 href={tab.href}
-                className={`flex min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-1 text-[11px] font-medium transition ${
-                  active ? "text-white" : "text-white/45 hover:text-white/75"
+                className={`flex flex-col items-center justify-center gap-1 py-1 text-[10px] font-medium leading-none transition ${
+                  active ? "text-white" : "text-white/45 active:text-white/80"
                 }`}
               >
                 <span
-                  className={`rounded-full px-3 py-0.5 transition ${
-                    active ? "bg-white/15" : ""
+                  className={`flex h-7 w-11 items-center justify-center rounded-full transition ${
+                    active ? "bg-white/14 text-white" : ""
                   }`}
                 >
                   {tab.icon}
