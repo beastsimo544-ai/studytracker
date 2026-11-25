@@ -3,12 +3,24 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useNotifications } from "@/components/notification-provider";
 import UserAvatar from "@/components/user-avatar";
 import { notifyAvatarUpdated, resizeAvatarFile } from "@/lib/avatar";
+import { exportSessionsToCsv, type CsvSessionRow } from "@/lib/csv-export";
+import {
+  DEFAULT_NOTIFICATION_PREFS,
+  getNotificationPermissionState,
+  loadNotificationPrefs,
+  requestNotificationPermissions,
+  saveNotificationPrefs,
+  sendInstantSystemNotification,
+  type NotificationPrefs,
+} from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { toast } = useNotifications();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [userId, setUserId] = useState<string | null>(null);
@@ -20,6 +32,14 @@ export default function SettingsPage() {
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Notification preferences
+  const [notifPermission, setNotifPermission] = useState<
+    "granted" | "denied" | "prompt" | "unsupported"
+  >("prompt");
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPrefs>(
+    DEFAULT_NOTIFICATION_PREFS
+  );
+
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
@@ -27,6 +47,7 @@ export default function SettingsPage() {
 
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
 
   useEffect(() => {
     const loadAccount = async () => {
@@ -41,6 +62,8 @@ export default function SettingsPage() {
 
       setUserId(user.id);
       setEmail(user.email ?? "");
+      setNotifPrefs(loadNotificationPrefs());
+      setNotifPermission(await getNotificationPermissionState());
 
       const fullRes = await supabase
         .from("profiles")
@@ -70,6 +93,66 @@ export default function SettingsPage() {
 
     loadAccount();
   }, [router]);
+
+  const updatePref = async (patch: Partial<NotificationPrefs>) => {
+    const next = { ...notifPrefs, ...patch };
+    setNotifPrefs(next);
+    saveNotificationPrefs(next);
+
+    if (
+      (patch.dailyReminderEnabled ||
+        patch.streakSaverEnabled ||
+        patch.examRemindersEnabled) &&
+      notifPermission !== "granted"
+    ) {
+      const granted = await requestNotificationPermissions();
+      setNotifPermission(await getNotificationPermissionState());
+      if (!granted) {
+        toast.info(
+          "Enable system notifications",
+          "Allow notifications on your device so background reminders can appear."
+        );
+      }
+    }
+  };
+
+  const handleEnableNotifications = async () => {
+    const granted = await requestNotificationPermissions();
+    const updatedState = await getNotificationPermissionState();
+    setNotifPermission(updatedState);
+
+    if (granted) {
+      toast.success(
+        "Notifications enabled!",
+        "You'll receive timer alerts and study reminders."
+      );
+      await sendInstantSystemNotification({
+        title: "StudyTracker Notifications Enabled 🔔",
+        body: "Pomodoro alerts, streak-savers, and friend updates are active!",
+      });
+    } else {
+      toast.error(
+        "Notifications blocked",
+        "Check your browser or phone app settings to allow notifications."
+      );
+    }
+  };
+
+  const handleTestNotification = async () => {
+    if (notifPermission !== "granted") {
+      await handleEnableNotifications();
+      return;
+    }
+
+    toast.success(
+      "Test notification sent!",
+      "Check your system notification bar."
+    );
+    await sendInstantSystemNotification({
+      title: "StudyTracker Test Alert ⚡",
+      body: "Notifications are working on this device!",
+    });
+  };
 
   const saveAvatarToDb = async (nextAvatarUrl: string | null) => {
     if (!userId) return;
@@ -103,7 +186,7 @@ export default function SettingsPage() {
     setHasProfileRow(true);
     setAvatarUrl(nextAvatarUrl);
     notifyAvatarUpdated(nextAvatarUrl);
-    setAvatarMessage(
+    toast.success(
       nextAvatarUrl ? "Profile picture updated!" : "Profile picture removed."
     );
   };
@@ -118,6 +201,7 @@ export default function SettingsPage() {
       setAvatarMessage("Processing image...");
       const dataUrl = await resizeAvatarFile(file);
       await saveAvatarToDb(dataUrl);
+      setAvatarMessage("");
     } catch (err) {
       setIsSavingAvatar(false);
       setAvatarMessage(
@@ -156,7 +240,54 @@ export default function SettingsPage() {
 
     setNewPassword("");
     setConfirmPassword("");
-    setPasswordMessage("Password updated successfully!");
+    setPasswordMessage("");
+    toast.success("Password updated successfully!");
+  };
+
+  const handleExportAllDataCsv = async () => {
+    if (!userId || isExportingCsv) return;
+    setIsExportingCsv(true);
+
+    const fullRes = await supabase
+      .from("study_sessions")
+      .select("subject, duration, created_at, note")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    let rows: CsvSessionRow[] = [];
+
+    if (fullRes.error && fullRes.error.message.includes("note")) {
+      const fallbackRes = await supabase
+        .from("study_sessions")
+        .select("subject, duration, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (fallbackRes.error) {
+        setIsExportingCsv(false);
+        toast.error("Could not load sessions for export");
+        return;
+      }
+      rows = (fallbackRes.data || []) as CsvSessionRow[];
+    } else if (fullRes.error) {
+      setIsExportingCsv(false);
+      toast.error("Could not load sessions for export");
+      return;
+    } else {
+      rows = (fullRes.data || []) as CsvSessionRow[];
+    }
+
+    setIsExportingCsv(false);
+
+    if (rows.length === 0) {
+      toast.info("No study sessions to export yet");
+      return;
+    }
+
+    const res = await exportSessionsToCsv(rows, "studytracker-all-sessions");
+    if (res !== "cancelled") {
+      toast.success("CSV exported!", `${rows.length} session(s) exported.`);
+    }
   };
 
   const handleDeleteAccount = async () => {
@@ -189,12 +320,12 @@ export default function SettingsPage() {
       notifyAvatarUpdated(null);
       await supabase.auth.signOut();
 
-      alert("Your account and study data have been deleted.");
+      toast.info("Account deleted", "Your account and study data were erased.");
       router.push("/");
       router.refresh();
     } catch (error) {
       console.error("Account deletion error:", error);
-      alert("An error occurred while deleting your account.");
+      toast.error("Could not delete account.");
       setIsDeletingAccount(false);
     }
   };
@@ -214,7 +345,8 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-3xl font-bold">Account Settings</h1>
         <p className="mt-2 text-white/60">
-          Manage your profile picture, password, privacy, and account data.
+          Manage your profile, reminders, notifications, password, and account
+          data.
         </p>
       </div>
 
@@ -297,6 +429,175 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* NOTIFICATIONS & REMINDERS */}
+      <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
+          <div>
+            <h2 className="text-lg font-semibold">
+              Notifications & Study Reminders 🔔
+            </h2>
+            <p className="mt-1 text-sm text-white/50">
+              Device status:{" "}
+              <span
+                className={
+                  notifPermission === "granted"
+                    ? "font-semibold text-emerald-400"
+                    : "font-semibold text-amber-300"
+                }
+              >
+                {notifPermission === "granted"
+                  ? "Enabled ✓"
+                  : notifPermission === "denied"
+                    ? "Blocked in settings"
+                    : notifPermission === "unsupported"
+                      ? "In-app alerts only"
+                      : "Not enabled yet"}
+              </span>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {notifPermission !== "granted" &&
+              notifPermission !== "unsupported" && (
+                <button
+                  type="button"
+                  onClick={handleEnableNotifications}
+                  className="rounded-xl bg-white px-4 py-2 text-xs font-semibold text-black transition hover:bg-white/90"
+                >
+                  Enable Notifications
+                </button>
+              )}
+
+            <button
+              type="button"
+              onClick={handleTestNotification}
+              className="rounded-xl border border-white/20 px-4 py-2 text-xs font-medium transition hover:bg-white/5"
+            >
+              Send Test
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-4 text-sm">
+          {/* Daily Reminder */}
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
+            <div>
+              <p className="font-medium">Daily Study Reminder</p>
+              <p className="text-xs text-white/50">
+                Get a daily nudge at your chosen study time.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <input
+                type="time"
+                value={notifPrefs.dailyReminderTime}
+                onChange={(e) =>
+                  updatePref({ dailyReminderTime: e.target.value })
+                }
+                className="rounded-xl border border-white/10 bg-black px-3 py-1.5 text-xs outline-none"
+              />
+
+              <button
+                type="button"
+                onClick={() =>
+                  updatePref({
+                    dailyReminderEnabled: !notifPrefs.dailyReminderEnabled,
+                  })
+                }
+                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                  notifPrefs.dailyReminderEnabled
+                    ? "bg-emerald-400 text-black"
+                    : "border border-white/15 bg-black/40 text-white/60"
+                }`}
+              >
+                {notifPrefs.dailyReminderEnabled ? "On" : "Off"}
+              </button>
+            </div>
+          </div>
+
+          {/* Streak-Saver */}
+          <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+            <div>
+              <p className="font-medium">Streak-Saver Alert (20:30) 🔥</p>
+              <p className="text-xs text-white/50">
+                Evening heads-up if your active study streak hasn&apos;t been
+                extended today.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                updatePref({
+                  streakSaverEnabled: !notifPrefs.streakSaverEnabled,
+                })
+              }
+              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                notifPrefs.streakSaverEnabled
+                  ? "bg-emerald-400 text-black"
+                  : "border border-white/15 bg-black/40 text-white/60"
+              }`}
+            >
+              {notifPrefs.streakSaverEnabled ? "On" : "Off"}
+            </button>
+          </div>
+
+          {/* Exam Reminders */}
+          <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+            <div>
+              <p className="font-medium">Upcoming Exam Reminders 📝</p>
+              <p className="text-xs text-white/50">
+                Notify the day before (09:00) and morning of (08:00) pinned
+                exams.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                updatePref({
+                  examRemindersEnabled: !notifPrefs.examRemindersEnabled,
+                })
+              }
+              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                notifPrefs.examRemindersEnabled
+                  ? "bg-emerald-400 text-black"
+                  : "border border-white/15 bg-black/40 text-white/60"
+              }`}
+            >
+              {notifPrefs.examRemindersEnabled ? "On" : "Off"}
+            </button>
+          </div>
+
+          {/* Live Friend Activity */}
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="font-medium">Live Friend Study Alerts 🟢</p>
+              <p className="text-xs text-white/50">
+                Alert when an accepted friend starts a live study session.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                updatePref({
+                  friendLiveAlertsEnabled: !notifPrefs.friendLiveAlertsEnabled,
+                })
+              }
+              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                notifPrefs.friendLiveAlertsEnabled
+                  ? "bg-emerald-400 text-black"
+                  : "border border-white/15 bg-black/40 text-white/60"
+              }`}
+            >
+              {notifPrefs.friendLiveAlertsEnabled ? "On" : "Off"}
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* CHANGE PASSWORD */}
       <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
         <h2 className="text-lg font-semibold">Change Password</h2>
@@ -349,22 +650,34 @@ export default function SettingsPage() {
         </form>
       </section>
 
-      {/* PRIVACY POLICY */}
+      {/* PRIVACY POLICY & CSV EXPORT */}
       <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold">Privacy & Data</h2>
+            <h2 className="text-lg font-semibold">Privacy &amp; Data Export</h2>
             <p className="mt-1 text-sm text-white/50">
-              Read how StudyTracker stores and protects your study data.
+              Export all your saved study sessions to CSV or view our privacy
+              policy.
             </p>
           </div>
 
-          <Link
-            href="/privacy"
-            className="rounded-xl border border-white/20 px-4 py-2 text-sm transition hover:bg-white/5"
-          >
-            View Privacy Policy
-          </Link>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              disabled={isExportingCsv}
+              onClick={handleExportAllDataCsv}
+              className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+            >
+              {isExportingCsv ? "Exporting..." : "Export CSV"}
+            </button>
+
+            <Link
+              href="/privacy"
+              className="rounded-xl border border-white/20 px-4 py-2 text-sm transition hover:bg-white/5"
+            >
+              Privacy Policy
+            </Link>
+          </div>
         </div>
       </section>
 

@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useNotifications } from "@/components/notification-provider";
+import { exportSessionsToCsv } from "@/lib/csv-export";
 import { resolveSubjectColor } from "@/lib/subject-colors";
 import { supabase } from "@/lib/supabase";
 
@@ -50,6 +52,7 @@ export default function HistoryPage() {
   const [isSavingManual, setIsSavingManual] = useState(false);
 
   const router = useRouter();
+  const { toast, checkNewAchievements } = useNotifications();
 
   useEffect(() => {
     const fetchSessions = async () => {
@@ -154,7 +157,7 @@ export default function HistoryPage() {
 
     const cleanedSubject = manualSubject.trim();
     if (!cleanedSubject) {
-      alert("Please choose or enter a subject.");
+      toast.error("Please choose or enter a subject.");
       return;
     }
 
@@ -163,13 +166,13 @@ export default function HistoryPage() {
       Math.max(0, Number(manualMinutes) || 0) * 60;
 
     if (totalSeconds <= 0) {
-      alert("Duration must be at least 1 minute.");
+      toast.error("Duration must be at least 1 minute.");
       return;
     }
 
     const parsedDate = manualDateTime ? new Date(manualDateTime) : new Date();
     if (Number.isNaN(parsedDate.getTime())) {
-      alert("Please enter a valid date and time.");
+      toast.error("Please enter a valid date and time.");
       return;
     }
 
@@ -215,7 +218,7 @@ export default function HistoryPage() {
 
       if (fallbackInsert.error) {
         setIsSavingManual(false);
-        alert(`Could not log session: ${fallbackInsert.error.message}`);
+        toast.error("Could not log session", fallbackInsert.error.message);
         return;
       }
 
@@ -225,7 +228,7 @@ export default function HistoryPage() {
       };
     } else if (fullInsert.error) {
       setIsSavingManual(false);
-      alert(`Could not log session: ${fullInsert.error.message}`);
+      toast.error("Could not log session", fullInsert.error.message);
       return;
     } else {
       createdSession = fullInsert.data as StudySession;
@@ -244,6 +247,8 @@ export default function HistoryPage() {
 
     setManualNote("");
     setShowManualForm(false);
+    toast.success("Past study session logged!", cleanedSubject);
+    await checkNewAchievements();
   };
 
   const deleteSession = async (id: number) => {
@@ -402,16 +407,35 @@ export default function HistoryPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setManualDateTime(getCurrentLocalDateTimeInput());
-            setShowManualForm((prev) => !prev);
-          }}
-          className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90"
-        >
-          {showManualForm ? "Cancel" : "+ Log Past Session"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            disabled={filteredSessions.length === 0}
+            onClick={async () => {
+              const res = await exportSessionsToCsv(filteredSessions);
+              if (res !== "cancelled") {
+                toast.success(
+                  "CSV exported!",
+                  `${filteredSessions.length} session(s) exported.`
+                );
+              }
+            }}
+            className="rounded-xl border border-white/20 px-4 py-3 text-sm font-medium transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Export CSV
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setManualDateTime(getCurrentLocalDateTimeInput());
+              setShowManualForm((prev) => !prev);
+            }}
+            className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90"
+          >
+            {showManualForm ? "Cancel" : "+ Log Past Session"}
+          </button>
+        </div>
       </div>
 
       {/* MANUAL SESSION FORM */}

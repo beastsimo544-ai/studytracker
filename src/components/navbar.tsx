@@ -1,17 +1,44 @@
 "use client";
 
+import { Capacitor } from "@capacitor/core";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNotifications } from "@/components/notification-provider";
 import UserAvatar from "@/components/user-avatar";
 import { supabase } from "@/lib/supabase";
+
+function formatRelativeTime(iso: string) {
+  const diffSec = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  );
+  if (diffSec < 60) return "Just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDays = Math.floor(diffHr / 24);
+  return `${diffDays}d ago`;
+}
 
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    clearNotifications,
+  } = useNotifications();
+
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isNativeApp, setIsNativeApp] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string>("?");
+  const [bellOpen, setBellOpen] = useState(false);
+  const bellContainerRef = useRef<HTMLDivElement | null>(null);
 
   const normalizedPath =
     pathname && pathname !== "/" ? pathname.replace(/\/+$/, "") : "/";
@@ -41,6 +68,7 @@ export default function Navbar() {
     };
 
     const checkUser = async () => {
+      setIsNativeApp(Capacitor.isNativePlatform());
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -80,7 +108,24 @@ export default function Navbar() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!bellOpen) return;
+
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (
+        bellContainerRef.current &&
+        !bellContainerRef.current.contains(e.target as Node)
+      ) {
+        setBellOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [bellOpen]);
+
   const handleLogout = async () => {
+    setBellOpen(false);
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();
@@ -246,10 +291,41 @@ export default function Navbar() {
         },
       ];
 
+  const renderBellButton = () => (
+    <button
+      type="button"
+      onClick={() => setBellOpen((prev) => !prev)}
+      aria-label="Notifications"
+      className="relative rounded-xl border border-white/15 p-2 text-white/80 transition hover:bg-white/5 hover:text-white"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="h-4 w-4"
+      >
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      </svg>
+
+      {unreadCount > 0 && (
+        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-400 px-1 text-[10px] font-bold text-black">
+          {unreadCount > 9 ? "9+" : unreadCount}
+        </span>
+      )}
+    </button>
+  );
+
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0a0a0a]/95 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-        <nav className="mx-auto max-w-6xl px-6 py-3.5 md:py-4">
+        <nav
+          ref={bellContainerRef}
+          className="relative mx-auto max-w-6xl px-6 py-3.5 md:py-4"
+        >
           <div className="flex items-center justify-between">
             <Link href="/" className="text-xl font-bold">
               StudyTracker
@@ -280,6 +356,19 @@ export default function Navbar() {
               >
                 Timer
               </Link>
+
+              {!isNativeApp && (
+                <Link
+                  href="/download"
+                  className={
+                    isActive("/download")
+                      ? "font-semibold text-white"
+                      : "text-white/70 transition hover:text-white"
+                  }
+                >
+                  Download
+                </Link>
+              )}
 
               {isLoggedIn && (
                 <>
@@ -313,6 +402,9 @@ export default function Navbar() {
                   >
                     Friends
                   </Link>
+
+                  {renderBellButton()}
+
                   <Link
                     href="/settings"
                     className={`flex items-center gap-2 ${
@@ -357,10 +449,25 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* Mobile top right actions (Avatar -> Settings + Logout) */}
-            <div className="flex items-center gap-2.5 md:hidden">
+            {/* Mobile top right actions (Get App + Bell + Avatar + Logout) */}
+            <div className="flex items-center gap-2 md:hidden">
+              {!isNativeApp && (
+                <Link
+                  href="/download"
+                  className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                    isActive("/download")
+                      ? "border-white/40 bg-white/15 text-white"
+                      : "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
+                  }`}
+                >
+                  App
+                </Link>
+              )}
+
               {isLoggedIn && (
                 <>
+                  {renderBellButton()}
+
                   <Link
                     href="/settings"
                     aria-label="Account Settings"
@@ -385,6 +492,87 @@ export default function Navbar() {
               )}
             </div>
           </div>
+
+          {/* Notification Bell Dropdown */}
+          {bellOpen && isLoggedIn && (
+            <div className="absolute right-4 top-full z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-2xl border border-white/15 bg-[#111111] shadow-2xl md:right-6">
+              <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                <span className="text-sm font-semibold">Notifications</span>
+
+                <div className="flex items-center gap-3 text-xs">
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={markAllAsRead}
+                      className="text-emerald-400 hover:underline"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                  {notifications.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearNotifications}
+                      className="text-white/45 hover:text-white"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="max-h-80 overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-xs text-white/45">
+                    No notifications right now.
+                  </p>
+                ) : (
+                  notifications.map((item) => (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      onClick={() => {
+                        markAsRead(item.id);
+                        setBellOpen(false);
+                      }}
+                      className={`flex items-start gap-3 border-b border-white/5 px-4 py-3 transition hover:bg-white/5 last:border-b-0 ${
+                        item.read ? "opacity-70" : "bg-white/[0.03]"
+                      }`}
+                    >
+                      <span className="mt-0.5 text-lg">{item.icon}</span>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-xs font-semibold text-white">
+                            {item.title}
+                          </p>
+                          {!item.read && (
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-xs text-white/60">
+                          {item.body}
+                        </p>
+                        <p className="mt-1 text-[10px] text-white/35">
+                          {formatRelativeTime(item.createdAt)}
+                        </p>
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
+
+              <div className="border-t border-white/10 bg-black/40 px-4 py-2.5 text-right">
+                <Link
+                  href="/settings"
+                  onClick={() => setBellOpen(false)}
+                  className="text-xs text-white/65 hover:text-white"
+                >
+                  Reminder & notification settings →
+                </Link>
+              </div>
+            </div>
+          )}
         </nav>
       </header>
 

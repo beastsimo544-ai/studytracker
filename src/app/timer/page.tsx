@@ -3,6 +3,15 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNotifications } from "@/components/notification-provider";
+import {
+  cancelPomodoroFinishNotification,
+  clearOngoingTimerNotification,
+  requestNotificationPermissions,
+  schedulePomodoroFinishNotification,
+  sendInstantSystemNotification,
+  showOngoingTimerNotification,
+} from "@/lib/notifications";
 import { resolveSubjectColor } from "@/lib/subject-colors";
 import { supabase } from "@/lib/supabase";
 
@@ -74,6 +83,7 @@ async function insertSessionWithOptionalNote(payload: {
 
 export default function TimerPage() {
   const router = useRouter();
+  const { toast, checkNewAchievements } = useNotifications();
 
   const [timerMode, setTimerMode] = useState<TimerMode>("stopwatch");
   const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>("focus");
@@ -405,11 +415,20 @@ export default function TimerPage() {
       setAccumulatedMs(0);
       setSeconds(0);
       playCompletionChime();
+      await clearOngoingTimerNotification();
+      await cancelPomodoroFinishNotification();
       await broadcastLiveStatus(null);
 
       if (pomodoroPhase === "focus") {
         setCompletedPomodoros((prev) => prev + 1);
         setPomodoroPhase("break");
+
+        if (typeof document !== "undefined" && document.hidden) {
+          sendInstantSystemNotification({
+            title: `Focus Complete (${focusMinutes}m)! 🍅`,
+            body: `Time for a ${breakMinutes}m break.`,
+          });
+        }
 
         const {
           data: { user },
@@ -426,13 +445,15 @@ export default function TimerPage() {
 
           if (!error) {
             setSessionNote("");
-            setStatusBanner(
-              `Focus block complete (${focusMinutes}m saved)! Time for a ${breakMinutes}m break.`
-            );
+            const msg = `Focus block complete (${focusMinutes}m saved)! Time for a ${breakMinutes}m break.`;
+            setStatusBanner(msg);
+            toast.success("🍅 Focus Block Saved!", `Take a ${breakMinutes}m break.`);
+            await checkNewAchievements();
           } else {
             setStatusBanner(
               `Focus block complete! Could not auto-save session: ${error.message}`
             );
+            toast.error("Could not auto-save session", error.message);
           }
         } else {
           setStatusBanner(
@@ -442,6 +463,13 @@ export default function TimerPage() {
       } else {
         setPomodoroPhase("focus");
         setStatusBanner("Break finished! Ready for your next focus session.");
+        toast.info("⏰ Break Finished!", "Ready for your next focus session.");
+        if (typeof document !== "undefined" && document.hidden) {
+          sendInstantSystemNotification({
+            title: "Break Finished! ⏰",
+            body: "Ready for your next focus session?",
+          });
+        }
       }
 
       autoCompletingRef.current = false;
@@ -453,6 +481,8 @@ export default function TimerPage() {
       focusMinutes,
       breakMinutes,
       broadcastLiveStatus,
+      toast,
+      checkNewAchievements,
     ]
   );
 
@@ -533,6 +563,30 @@ export default function TimerPage() {
     const now = Date.now();
     setStartedAt(now);
 
+    requestNotificationPermissions().then(() => {
+      const isStudyingFocus =
+        timerMode === "stopwatch" || pomodoroPhase === "focus";
+      if (isStudyingFocus && selectedSubject) {
+        showOngoingTimerNotification(
+          selectedSubject,
+          timerMode === "pomodoro" ? "Pomodoro" : "Study"
+        );
+      }
+      if (timerMode === "pomodoro") {
+        const remainingMs = Math.max(
+          0,
+          targetPomodoroSeconds * 1000 - accumulatedMs
+        );
+        schedulePomodoroFinishNotification({
+          endTimestampMs: now + remainingMs,
+          isBreak: pomodoroPhase === "break",
+          subject: selectedSubject || "Study",
+          durationMinutes:
+            pomodoroPhase === "break" ? breakMinutes : focusMinutes,
+        });
+      }
+    });
+
     const isStudyingFocus =
       timerMode === "stopwatch" || pomodoroPhase === "focus";
     if (isStudyingFocus && selectedSubject) {
@@ -546,6 +600,8 @@ export default function TimerPage() {
     setAccumulatedMs(totalMs);
     setStartedAt(null);
     setSeconds(Math.floor(totalMs / 1000));
+    clearOngoingTimerNotification();
+    cancelPomodoroFinishNotification();
     broadcastLiveStatus(null);
   };
 
@@ -557,6 +613,8 @@ export default function TimerPage() {
     if (timerMode === "stopwatch") {
       localStorage.removeItem("studyTimer");
     }
+    clearOngoingTimerNotification();
+    cancelPomodoroFinishNotification();
     broadcastLiveStatus(null);
   };
 
@@ -566,6 +624,8 @@ export default function TimerPage() {
     setSeconds(0);
     setPomodoroPhase("focus");
     setStatusBanner("");
+    clearOngoingTimerNotification();
+    cancelPomodoroFinishNotification();
   };
 
   const applyPreset = (nextPreset: "25-5" | "50-10" | "custom") => {
@@ -599,6 +659,8 @@ export default function TimerPage() {
     setAccumulatedMs(totalMs);
     setStartedAt(null);
     setSeconds(finalSeconds);
+    await clearOngoingTimerNotification();
+    await cancelPomodoroFinishNotification();
     await broadcastLiveStatus(null);
 
     try {
@@ -608,8 +670,9 @@ export default function TimerPage() {
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        alert(
-          "Session paused! Log in or create an account to save your study progress."
+        toast.info(
+          "Session paused!",
+          "Sign in or create an account to save your study progress."
         );
 
         router.push("/login");
@@ -626,8 +689,9 @@ export default function TimerPage() {
 
       if (error) {
         console.error(error);
-        alert(
-          "Could not save session to database. Your time is kept — try again."
+        toast.error(
+          "Could not save session",
+          "Your elapsed time is kept — please try again."
         );
         return;
       }
@@ -641,6 +705,11 @@ export default function TimerPage() {
       }
 
       setStatusBanner("Study session saved!");
+      toast.success(
+        "Study session saved!",
+        `${selectedSubject} · ${formatTime(finalSeconds)}`
+      );
+      await checkNewAchievements();
     } finally {
       isSavingRef.current = false;
       setIsSaving(false);

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useNotifications } from "@/components/notification-provider";
 import {
   SUBJECT_COLOR_OPTIONS,
   resolveSubjectColor,
@@ -26,6 +27,7 @@ export default function SubjectPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const router = useRouter();
+  const { toast } = useNotifications();
 
   useEffect(() => {
     const fetchSubjects = async () => {
@@ -85,7 +87,7 @@ export default function SubjectPage() {
     );
 
     if (alreadyExists) {
-      alert("That subject already exists.");
+      toast.info("Subject already exists", `"${trimmedSubject}" is already in your list.`);
       return;
     }
 
@@ -140,6 +142,7 @@ export default function SubjectPage() {
 
     setSubjects((previous) => [...previous, fullInsert.data as Subject]);
     setNewSubject("");
+    toast.success("Subject added!", trimmedSubject);
   };
 
   const deleteSubject = async (subjectId: number) => {

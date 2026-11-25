@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNotifications } from "@/components/notification-provider";
 import UserAvatar from "@/components/user-avatar";
 import { evaluateAchievements, type Achievement } from "@/lib/achievements";
 import { notifyAvatarUpdated, resizeAvatarFile } from "@/lib/avatar";
@@ -131,6 +132,7 @@ function formatLiveElapsed(startedAtIso: string, nowMs: number) {
 
 export default function FriendsPage() {
   const router = useRouter();
+  const { toast } = useNotifications();
   const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -658,7 +660,10 @@ export default function FriendsPage() {
     if (!currentUserId) return;
 
     if (!myUsername) {
-      alert("Please set your @username above before sending friend requests.");
+      toast.info(
+        "Choose a @username first",
+        "Set your @username above before sending friend requests."
+      );
       return;
     }
 
@@ -670,13 +675,14 @@ export default function FriendsPage() {
 
     if (error) {
       if (error.code === "23505") {
-        alert("A friend request already exists between you and this user.");
+        toast.info("Request already exists");
       } else {
-        alert(`Could not send friend request: ${error.message}`);
+        toast.error("Could not send friend request", error.message);
       }
       return;
     }
 
+    toast.success("Friend request sent!");
     await loadFriendsData(currentUserId);
   };
 
@@ -690,10 +696,11 @@ export default function FriendsPage() {
       .select("id");
 
     if (error || !data || data.length === 0) {
-      alert("Could not accept friend request.");
+      toast.error("Could not accept friend request");
       return;
     }
 
+    toast.success("Friend added! 🎉");
     await loadFriendsData(currentUserId);
   };
 

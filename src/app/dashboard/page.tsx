@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useNotifications } from "@/components/notification-provider";
 import { evaluateAchievements } from "@/lib/achievements";
 import { resolveSubjectColor } from "@/lib/subject-colors";
 import { supabase } from "@/lib/supabase";
@@ -56,6 +57,7 @@ export default function Dashboard() {
   const [isSavingExam, setIsSavingExam] = useState(false);
 
   const router = useRouter();
+  const { toast, refreshSchedules } = useNotifications();
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -236,7 +238,7 @@ export default function Dashboard() {
     setIsSavingExam(false);
 
     if (error) {
-      alert(`Could not add exam: ${error.message}`);
+      toast.error("Could not add exam", error.message);
       return;
     }
 
@@ -247,6 +249,8 @@ export default function Dashboard() {
     setExamTitle("");
     setExamDate("");
     setShowAddExam(false);
+    toast.success("Exam countdown added!", cleanedTitle);
+    refreshSchedules();
   };
 
   const handleDeleteExam = async (examId: number) => {
@@ -269,11 +273,12 @@ export default function Dashboard() {
       .eq("user_id", currentUserId);
 
     if (error) {
-      alert("Could not remove exam.");
+      toast.error("Could not remove exam");
       return;
     }
 
     setExams((prev) => prev.filter((ex) => ex.id !== examId));
+    refreshSchedules();
   };
 
   const today = new Date();

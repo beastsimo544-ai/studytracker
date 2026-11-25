@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# android apk outputs (except the public web download APK)
+*.apk
+!public/StudyTracker.apk
+*.aab
