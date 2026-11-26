@@ -22,6 +22,89 @@ type StudyTask = {
   text: string;
   done: boolean;
 };
+type StoredTaskState = {
+  tasks: StudyTask[];
+  activeTaskId: string | null;
+  updatedAt: number;
+};
+
+const MAX_SYNCED_TASKS = 80;
+
+function sanitizeTasks(raw: unknown): StudyTask[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (item): item is StudyTask =>
+        Boolean(item) &&
+        typeof item === "object" &&
+        typeof (item as StudyTask).id === "string" &&
+        typeof (item as StudyTask).text === "string" &&
+        typeof (item as StudyTask).done === "boolean"
+    )
+    .map((item) => ({
+      id: item.id,
+      text: item.text.slice(0, 140),
+      done: item.done,
+    }))
+    .slice(0, MAX_SYNCED_TASKS);
+}
+
+function getTasksStorageKey(userId: string | null) {
+  return userId ? `studyTimerTasks_${userId}` : "studyTimerTasks";
+}
+
+function readLocalTasks(userId: string | null): {
+  state: StoredTaskState;
+  hasStoredData: boolean;
+} {
+  if (typeof window === "undefined") {
+    return {
+      state: { tasks: [], activeTaskId: null, updatedAt: 0 },
+      hasStoredData: false,
+    };
+  }
+
+  const primaryKey = getTasksStorageKey(userId);
+  let raw = localStorage.getItem(primaryKey);
+  if (!raw && userId) {
+    raw = localStorage.getItem("studyTimerTasks");
+  }
+  if (!raw) {
+    return {
+      state: { tasks: [], activeTaskId: null, updatedAt: 0 },
+      hasStoredData: false,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      tasks?: unknown;
+      activeTaskId?: unknown;
+      updatedAt?: unknown;
+    };
+    const tasks = sanitizeTasks(parsed?.tasks);
+    const activeTaskId =
+      typeof parsed?.activeTaskId === "string" ? parsed.activeTaskId : null;
+    const updatedAt =
+      typeof parsed?.updatedAt === "number" ? parsed.updatedAt : 0;
+
+    return {
+      state: { tasks, activeTaskId, updatedAt },
+      hasStoredData: Array.isArray(parsed?.tasks),
+    };
+  } catch {
+    localStorage.removeItem(primaryKey);
+    return {
+      state: { tasks: [], activeTaskId: null, updatedAt: 0 },
+      hasStoredData: false,
+    };
+  }
+}
+
+function writeLocalTasks(userId: string | null, state: StoredTaskState) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(getTasksStorageKey(userId), JSON.stringify(state));
+}
 
 function playCompletionChime() {
   if (typeof window === "undefined") return;
@@ -101,6 +184,9 @@ export default function TimerPage() {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [isTodoOpen, setIsTodoOpen] = useState(false);
   const [newTaskText, setNewTaskText] = useState("");
+  const [taskSyncStatus, setTaskSyncStatus] = useState<
+    "idle" | "syncing" | "synced" | "error"
+  >("idle");
   const [isMinimalFocus, setIsMinimalFocus] = useState(false);
 
   const [accumulatedMs, setAccumulatedMs] = useState(0);
@@ -118,6 +204,13 @@ export default function TimerPage() {
   const isSavingRef = useRef(false);
   const autoCompletingRef = useRef(false);
   const newTaskInputRef = useRef<HTMLInputElement | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
+  const tasksRef = useRef<StudyTask[]>([]);
+  const activeTaskIdRef = useRef<string | null>(null);
+  const tasksUpdatedAtRef = useRef<number>(0);
+  const isSyncingCloudRef = useRef(false);
+  const pendingCloudPayloadRef = useRef<StoredTaskState | null>(null);
+  const lastPullAtRef = useRef<number>(0);
 
   const activeTask =
     tasks.find((task) => task.id === activeTaskId && !task.done) ??
@@ -211,6 +304,129 @@ export default function TimerPage() {
     };
   }, [isRunning]);
 
+  const flushCloudTaskSync = useCallback(async () => {
+    if (
+      isSyncingCloudRef.current ||
+      !pendingCloudPayloadRef.current ||
+      !currentUserIdRef.current
+    ) {
+      return;
+    }
+
+    isSyncingCloudRef.current = true;
+    setTaskSyncStatus("syncing");
+
+    try {
+      while (pendingCloudPayloadRef.current && currentUserIdRef.current) {
+        const payload = pendingCloudPayloadRef.current;
+        pendingCloudPayloadRef.current = null;
+
+        const { error } = await supabase.auth.updateUser({
+          data: {
+            timer_tasks: payload.tasks,
+            timer_active_task_id: payload.activeTaskId,
+            timer_tasks_updated_at: payload.updatedAt,
+          },
+        });
+
+        if (error) {
+          console.error("Could not sync timer tasks:", error);
+          setTaskSyncStatus("error");
+          break;
+        }
+
+        if (!pendingCloudPayloadRef.current) {
+          setTaskSyncStatus("synced");
+        }
+      }
+    } finally {
+      isSyncingCloudRef.current = false;
+    }
+  }, []);
+
+  const queueCloudTaskSync = useCallback(
+    (state: StoredTaskState) => {
+      if (!currentUserIdRef.current) return;
+      pendingCloudPayloadRef.current = state;
+      void flushCloudTaskSync();
+    },
+    [flushCloudTaskSync]
+  );
+
+  const applyTaskState = useCallback(
+    (
+      nextTasks: StudyTask[],
+      nextActiveTaskId: string | null,
+      opts?: { updatedAt?: number; syncToCloud?: boolean }
+    ) => {
+      const updatedAt = opts?.updatedAt ?? Date.now();
+      tasksRef.current = nextTasks;
+      activeTaskIdRef.current = nextActiveTaskId;
+      tasksUpdatedAtRef.current = updatedAt;
+      setTasks(nextTasks);
+      setActiveTaskId(nextActiveTaskId);
+      writeLocalTasks(currentUserIdRef.current, {
+        tasks: nextTasks,
+        activeTaskId: nextActiveTaskId,
+        updatedAt,
+      });
+
+      if (opts?.syncToCloud !== false) {
+        queueCloudTaskSync({
+          tasks: nextTasks,
+          activeTaskId: nextActiveTaskId,
+          updatedAt,
+        });
+      }
+    },
+    [queueCloudTaskSync]
+  );
+
+  const reconcileTasksWithUser = useCallback(
+    (user: { id: string; user_metadata?: Record<string, unknown> }) => {
+      if (isSyncingCloudRef.current || pendingCloudPayloadRef.current) {
+        return;
+      }
+
+      const { state: localState, hasStoredData } = readLocalTasks(user.id);
+      const meta = user.user_metadata ?? {};
+      const hasCloudTasks = Array.isArray(meta.timer_tasks);
+      const cloudTasks = hasCloudTasks ? sanitizeTasks(meta.timer_tasks) : [];
+      const cloudActiveTaskId =
+        typeof meta.timer_active_task_id === "string"
+          ? meta.timer_active_task_id
+          : null;
+      const cloudUpdatedAt =
+        typeof meta.timer_tasks_updated_at === "number"
+          ? meta.timer_tasks_updated_at
+          : 0;
+
+      if (
+        hasCloudTasks &&
+        (!hasStoredData || cloudUpdatedAt >= localState.updatedAt)
+      ) {
+        applyTaskState(cloudTasks, cloudActiveTaskId, {
+          updatedAt: cloudUpdatedAt || Date.now(),
+          syncToCloud: false,
+        });
+        setTaskSyncStatus("synced");
+      } else if (
+        hasStoredData &&
+        (localState.tasks.length > 0 || localState.updatedAt > cloudUpdatedAt)
+      ) {
+        const migratedAt = localState.updatedAt || Date.now();
+        applyTaskState(localState.tasks, localState.activeTaskId, {
+          updatedAt: migratedAt,
+          syncToCloud: true,
+        });
+      } else {
+        applyTaskState([], null, { updatedAt: 0, syncToCloud: false });
+        setTaskSyncStatus("synced");
+      }
+    },
+    [applyTaskState]
+  );
+
   // Restore unfinished timer and load subjects on mount
   useEffect(() => {
     const initTimerAndSubjects = async () => {
@@ -289,32 +505,17 @@ export default function TimerPage() {
         }
       }
 
-      // Restore saved timer to-do list
-      const rawTasks = localStorage.getItem("studyTimerTasks");
-      if (rawTasks) {
-        try {
-          const parsed = JSON.parse(rawTasks) as {
-            tasks?: StudyTask[];
-            activeTaskId?: string | null;
-          };
-          if (Array.isArray(parsed.tasks)) {
-            const validTasks = parsed.tasks.filter(
-              (item): item is StudyTask =>
-                Boolean(item) &&
-                typeof item.id === "string" &&
-                typeof item.text === "string" &&
-                typeof item.done === "boolean"
-            );
-            setTasks(validTasks);
-            setActiveTaskId(
-              typeof parsed.activeTaskId === "string"
-                ? parsed.activeTaskId
-                : null
-            );
+      // Restore initial local timer to-do list before cloud check
+      const initialLocal = readLocalTasks(null);
+      if (initialLocal.hasStoredData) {
+        applyTaskState(
+          initialLocal.state.tasks,
+          initialLocal.state.activeTaskId,
+          {
+            updatedAt: initialLocal.state.updatedAt,
+            syncToCloud: false,
           }
-        } catch {
-          localStorage.removeItem("studyTimerTasks");
-        }
+        );
       }
 
       setHasHydrated(true);
@@ -323,7 +524,12 @@ export default function TimerPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
+      currentUserIdRef.current = user?.id ?? null;
       setIsLoggedIn(Boolean(user));
+
+      if (user) {
+        reconcileTasksWithUser(user);
+      }
 
       if (!user) {
         const publicSubjects = ["Study", "Deep Work", "Reading", "Other"];
@@ -396,16 +602,52 @@ export default function TimerPage() {
     };
 
     initTimerAndSubjects();
-  }, []);
+  }, [applyTaskState, reconcileTasksWithUser]);
 
-  // Persist timer to-do list
+  // Pull fresh tasks when returning to tab or resuming mobile app
   useEffect(() => {
-    if (!hasHydrated) return;
-    localStorage.setItem(
-      "studyTimerTasks",
-      JSON.stringify({ tasks, activeTaskId })
-    );
-  }, [tasks, activeTaskId, hasHydrated]);
+    const pullLatestTasks = async () => {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState === "hidden"
+      ) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastPullAtRef.current < 3000) return;
+      lastPullAtRef.current = now;
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      currentUserIdRef.current = user?.id ?? null;
+      setIsLoggedIn(Boolean(user));
+
+      if (user) {
+        reconcileTasksWithUser(user);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void pullLatestTasks();
+      }
+    };
+
+    const handleWindowFocus = () => {
+      void pullLatestTasks();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [reconcileTasksWithUser]);
 
   // Save active/paused timer state
   useEffect(() => {
@@ -827,46 +1069,58 @@ export default function TimerPage() {
       done: false,
     };
 
-    setTasks((prev) => [...prev, newTask]);
-    if (!activeTask) {
-      setActiveTaskId(newTask.id);
-    }
+    const prevTasks = tasksRef.current;
+    const nextTasks = [...prevTasks, newTask].slice(-MAX_SYNCED_TASKS);
+    const currentActive =
+      prevTasks.find((t) => t.id === activeTaskIdRef.current && !t.done) ??
+      prevTasks.find((t) => !t.done) ??
+      null;
+    const nextActiveId = currentActive ? currentActive.id : newTask.id;
+
+    applyTaskState(nextTasks, nextActiveId);
     setNewTaskText("");
     newTaskInputRef.current?.focus();
   };
 
   const toggleTaskDone = (taskId: string) => {
-    const target = tasks.find((t) => t.id === taskId);
+    const prevTasks = tasksRef.current;
+    const target = prevTasks.find((t) => t.id === taskId);
     if (!target) return;
 
+    const currentActive =
+      prevTasks.find((t) => t.id === activeTaskIdRef.current && !t.done) ??
+      prevTasks.find((t) => !t.done) ??
+      null;
     const willMarkDone = !target.done;
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId ? { ...task, done: !task.done } : task
-      )
+    const nextTasks = prevTasks.map((task) =>
+      task.id === taskId ? { ...task, done: !task.done } : task
     );
 
-    if (willMarkDone && activeTask?.id === taskId) {
+    applyTaskState(nextTasks, activeTaskIdRef.current);
+
+    if (willMarkDone && currentActive?.id === taskId) {
       toast.success("Task completed!", target.text);
     }
   };
 
   const selectActiveTask = (taskId: string) => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId && task.done ? { ...task, done: false } : task
-      )
+    const nextTasks = tasksRef.current.map((task) =>
+      task.id === taskId && task.done ? { ...task, done: false } : task
     );
-    setActiveTaskId(taskId);
+    applyTaskState(nextTasks, taskId);
     setIsTodoOpen(false);
   };
 
   const deleteTask = (taskId: string) => {
-    setTasks((prev) => prev.filter((task) => task.id !== taskId));
+    const nextTasks = tasksRef.current.filter((task) => task.id !== taskId);
+    const nextActiveId =
+      activeTaskIdRef.current === taskId ? null : activeTaskIdRef.current;
+    applyTaskState(nextTasks, nextActiveId);
   };
 
   const clearCompletedTasks = () => {
-    setTasks((prev) => prev.filter((task) => !task.done));
+    const nextTasks = tasksRef.current.filter((task) => !task.done);
+    applyTaskState(nextTasks, activeTaskIdRef.current);
   };
 
   const enterMinimalFocus = () => {
@@ -1504,9 +1758,31 @@ export default function TimerPage() {
                 </div>
 
                 <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-2.5 text-[11px]">
-                  <span className="tabular-nums text-white/40">
-                    {completedTasksCount}/{tasks.length} done
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="tabular-nums text-white/40">
+                      {completedTasksCount}/{tasks.length} done
+                    </span>
+                    <span
+                      className={
+                        !isLoggedIn
+                          ? "text-white/35"
+                          : taskSyncStatus === "syncing"
+                            ? "text-white/45"
+                            : taskSyncStatus === "error"
+                              ? "text-rose-400"
+                              : "text-emerald-400/80"
+                      }
+                    >
+                      ·{" "}
+                      {!isLoggedIn
+                        ? "Local only"
+                        : taskSyncStatus === "syncing"
+                          ? "Syncing..."
+                          : taskSyncStatus === "error"
+                            ? "Sync error"
+                            : "Synced"}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-3">
                     {completedTasksCount > 0 && (
                       <button
