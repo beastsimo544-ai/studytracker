@@ -12,6 +12,21 @@ import {
   sendInstantSystemNotification,
   showOngoingTimerNotification,
 } from "@/lib/notifications";
+import {
+  getAndroidNowPlaying,
+  getPlatformMeta,
+  hasAndroidNowPlayingPermission,
+  isAndroidNative,
+  loadSavedManualTrack,
+  loadShareMusicEnabled,
+  openAndroidNowPlayingSettings,
+  resolveMusicLink,
+  saveManualTrack,
+  saveShareMusicEnabled,
+  syncListeningToProfile,
+  type MusicPlatform,
+  type NowPlayingTrack,
+} from "@/lib/now-playing";
 import { resolveSubjectColor } from "@/lib/subject-colors";
 import { supabase } from "@/lib/supabase";
 
@@ -187,6 +202,19 @@ export default function TimerPage() {
   const [taskSyncStatus, setTaskSyncStatus] = useState<
     "idle" | "syncing" | "synced" | "error"
   >("idle");
+  const [sharedTrack, setSharedTrack] = useState<NowPlayingTrack | null>(null);
+  const [detectedTrack, setDetectedTrack] = useState<NowPlayingTrack | null>(
+    null
+  );
+  const [isMusicPanelOpen, setIsMusicPanelOpen] = useState(false);
+  const [musicLinkInput, setMusicLinkInput] = useState("");
+  const [manualTitleInput, setManualTitleInput] = useState("");
+  const [manualPlatform, setManualPlatform] =
+    useState<MusicPlatform>("spotify");
+  const [isResolvingMusic, setIsResolvingMusic] = useState(false);
+  const [isAndroidApp, setIsAndroidApp] = useState(false);
+  const [androidMusicPermission, setAndroidMusicPermission] = useState(false);
+  const [shareMusicEnabled, setShareMusicEnabled] = useState(true);
   const [isMinimalFocus, setIsMinimalFocus] = useState(false);
 
   const [accumulatedMs, setAccumulatedMs] = useState(0);
@@ -211,6 +239,11 @@ export default function TimerPage() {
   const isSyncingCloudRef = useRef(false);
   const pendingCloudPayloadRef = useRef<StoredTaskState | null>(null);
   const lastPullAtRef = useRef<number>(0);
+  const lastSyncedListeningKeyRef = useRef<string>("");
+
+  const activeListeningTrack = shareMusicEnabled
+    ? (detectedTrack ?? sharedTrack)
+    : null;
 
   const activeTask =
     tasks.find((task) => task.id === activeTaskId && !task.done) ??
@@ -258,6 +291,11 @@ export default function TimerPage() {
                 : null,
           })
           .eq("user_id", user.id);
+
+        if (!activeSubject) {
+          lastSyncedListeningKeyRef.current = "";
+          await syncListeningToProfile(null);
+        }
       } catch {
         // Optional columns may not exist yet
       }
@@ -505,7 +543,7 @@ export default function TimerPage() {
         }
       }
 
-      // Restore initial local timer to-do list before cloud check
+      // Restore initial local timer to-do list & music state before cloud check
       const initialLocal = readLocalTasks(null);
       if (initialLocal.hasStoredData) {
         applyTaskState(
@@ -516,6 +554,21 @@ export default function TimerPage() {
             syncToCloud: false,
           }
         );
+      }
+
+      const initialShareEnabled = loadShareMusicEnabled();
+      setShareMusicEnabled(initialShareEnabled);
+      setSharedTrack(loadSavedManualTrack());
+
+      const android = isAndroidNative();
+      setIsAndroidApp(android);
+      if (android) {
+        const granted = await hasAndroidNowPlayingPermission();
+        setAndroidMusicPermission(granted);
+        if (granted && initialShareEnabled) {
+          const currentTrack = await getAndroidNowPlaying();
+          setDetectedTrack(currentTrack);
+        }
       }
 
       setHasHydrated(true);
@@ -648,6 +701,86 @@ export default function TimerPage() {
       window.removeEventListener("focus", handleWindowFocus);
     };
   }, [reconcileTasksWithUser]);
+
+  // Refresh Android Notification Access state when returning to app
+  useEffect(() => {
+    if (!isAndroidApp) return;
+
+    const refreshAndroidState = async () => {
+      if (document.visibilityState === "hidden") return;
+      const granted = await hasAndroidNowPlayingPermission();
+      setAndroidMusicPermission(granted);
+      if (granted && shareMusicEnabled) {
+        const currentTrack = await getAndroidNowPlaying();
+        setDetectedTrack(currentTrack);
+      } else if (!granted) {
+        setDetectedTrack(null);
+      }
+    };
+
+    document.addEventListener("visibilitychange", refreshAndroidState);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshAndroidState);
+    };
+  }, [isAndroidApp, shareMusicEnabled]);
+
+  // Broadcast live music status while studying and poll Android media sessions
+  useEffect(() => {
+    const isStudyingFocus =
+      isRunning &&
+      isLoggedIn &&
+      (timerMode === "stopwatch" || pomodoroPhase === "focus");
+
+    if (!isStudyingFocus) {
+      return;
+    }
+
+    const syncTrack = async (track: NowPlayingTrack | null) => {
+      const key = track
+        ? `${track.title}|${track.artist ?? ""}|${track.platform}|${track.url ?? ""}`
+        : "NONE";
+      if (lastSyncedListeningKeyRef.current === key) return;
+      lastSyncedListeningKeyRef.current = key;
+      await syncListeningToProfile(track);
+    };
+
+    if (!shareMusicEnabled) {
+      void syncTrack(null);
+      return;
+    }
+
+    if (!isAndroidApp || !androidMusicPermission) {
+      void syncTrack(sharedTrack);
+      return;
+    }
+
+    let cancelled = false;
+    const pollAndroid = async () => {
+      const current = await getAndroidNowPlaying();
+      if (cancelled) return;
+      setDetectedTrack(current);
+      await syncTrack(current ?? sharedTrack);
+    };
+
+    void pollAndroid();
+    const interval = setInterval(() => {
+      void pollAndroid();
+    }, 10000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [
+    isRunning,
+    isLoggedIn,
+    timerMode,
+    pomodoroPhase,
+    shareMusicEnabled,
+    sharedTrack,
+    isAndroidApp,
+    androidMusicPermission,
+  ]);
 
   // Save active/paused timer state
   useEffect(() => {
@@ -1121,6 +1254,105 @@ export default function TimerPage() {
   const clearCompletedTasks = () => {
     const nextTasks = tasksRef.current.filter((task) => !task.done);
     applyTaskState(nextTasks, activeTaskIdRef.current);
+  };
+
+  const handleShareMusicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!musicLinkInput.trim() || isResolvingMusic) return;
+
+    setIsResolvingMusic(true);
+    const resolved = await resolveMusicLink(musicLinkInput);
+    setIsResolvingMusic(false);
+
+    if (!resolved) {
+      toast.error(
+        "Unsupported link",
+        "Paste a valid Spotify, YouTube Music, or SoundCloud link."
+      );
+      return;
+    }
+
+    setSharedTrack(resolved);
+    saveManualTrack(resolved);
+    setMusicLinkInput("");
+    setIsMusicPanelOpen(false);
+    toast.success("Music set!", resolved.title);
+
+    if (isRunning && !isBreakPhase && isLoggedIn && shareMusicEnabled) {
+      const nextTrack = detectedTrack ?? resolved;
+      const res = await syncListeningToProfile(nextTrack);
+      if (res.missingColumns) {
+        toast.info(
+          "SQL update needed for Friends sync",
+          "Run supabase-listening-setup.sql in Supabase SQL Editor."
+        );
+      }
+    }
+  };
+
+  const handleSetManualTrack = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = manualTitleInput.trim().slice(0, 140);
+    if (!title) return;
+
+    const track: NowPlayingTrack = {
+      title,
+      artist: null,
+      platform: manualPlatform,
+      url: null,
+      source: "manual",
+    };
+
+    setSharedTrack(track);
+    saveManualTrack(track);
+    setManualTitleInput("");
+    setIsMusicPanelOpen(false);
+    toast.success("Music set!", track.title);
+
+    if (isRunning && !isBreakPhase && isLoggedIn && shareMusicEnabled) {
+      const nextTrack = detectedTrack ?? track;
+      await syncListeningToProfile(nextTrack);
+    }
+  };
+
+  const handleClearSharedTrack = async () => {
+    setSharedTrack(null);
+    saveManualTrack(null);
+    if (isRunning && !isBreakPhase && isLoggedIn) {
+      await syncListeningToProfile(shareMusicEnabled ? detectedTrack : null);
+    }
+  };
+
+  const handleToggleShareMusic = async () => {
+    const next = !shareMusicEnabled;
+    setShareMusicEnabled(next);
+    saveShareMusicEnabled(next);
+    if (!next && isRunning && isLoggedIn) {
+      lastSyncedListeningKeyRef.current = "NONE";
+      await syncListeningToProfile(null);
+    }
+  };
+
+  const handleRefreshAndroidMusic = async () => {
+    const granted = await hasAndroidNowPlayingPermission();
+    setAndroidMusicPermission(granted);
+    if (!granted) {
+      await openAndroidNowPlayingSettings();
+      return;
+    }
+    const current = await getAndroidNowPlaying();
+    setDetectedTrack(current);
+    if (current) {
+      toast.success("Detected track!", current.title);
+      if (isRunning && !isBreakPhase && isLoggedIn && shareMusicEnabled) {
+        await syncListeningToProfile(current);
+      }
+    } else {
+      toast.info(
+        "Nothing playing right now",
+        "Start a song on Spotify, YouTube Music, or SoundCloud."
+      );
+    }
   };
 
   const enterMinimalFocus = () => {
@@ -1884,6 +2116,219 @@ export default function TimerPage() {
           )}
         </div>
       </div>
+
+      {/* Compact Study Music Bar (Spotify · YouTube Music · SoundCloud) */}
+      {(() => {
+        const musicMeta = activeListeningTrack
+          ? getPlatformMeta(activeListeningTrack.platform)
+          : null;
+
+        return (
+          <section className="mt-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111113]">
+            <div className="flex items-center justify-between gap-2.5 px-4 py-2.5">
+              <button
+                type="button"
+                onClick={() => setIsMusicPanelOpen((prev) => !prev)}
+                className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+              >
+                {activeListeningTrack && musicMeta ? (
+                  <>
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: musicMeta.dotColor }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-white sm:text-sm">
+                      {activeListeningTrack.title}
+                      {activeListeningTrack.artist && (
+                        <span className="font-normal text-white/55">
+                          {" "}
+                          — {activeListeningTrack.artist}
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      className={`hidden shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium sm:inline-flex ${musicMeta.badgeClass}`}
+                    >
+                      {musicMeta.label}
+                      {activeListeningTrack.source === "android"
+                        ? " · Auto"
+                        : ""}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                      className="h-4 w-4 shrink-0 text-white/40"
+                    >
+                      <path d="M9 18V5l12-2v13" />
+                      <circle cx="6" cy="18" r="3" />
+                      <circle cx="18" cy="16" r="3" />
+                    </svg>
+                    <span className="truncate text-xs text-white/55 sm:text-sm">
+                      {shareMusicEnabled
+                        ? "Share what you're listening to"
+                        : "Music sharing paused"}
+                    </span>
+                  </>
+                )}
+              </button>
+
+              <div className="flex shrink-0 items-center gap-1.5">
+                {sharedTrack && !detectedTrack && (
+                  <button
+                    type="button"
+                    onClick={handleClearSharedTrack}
+                    aria-label="Clear shared track"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-xs text-white/40 transition hover:bg-white/10 hover:text-white"
+                  >
+                    ✕
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setIsMusicPanelOpen((prev) => !prev)}
+                  className="h-7 rounded-lg border border-white/12 bg-[#09090b] px-2.5 text-[11px] font-medium text-white/75 transition hover:border-white/25 hover:text-white"
+                >
+                  {isMusicPanelOpen
+                    ? "Close"
+                    : activeListeningTrack
+                      ? "Change"
+                      : "Connect"}
+                </button>
+              </div>
+            </div>
+
+            {isMusicPanelOpen && (
+              <div className="space-y-3 border-t border-white/[0.08] bg-[#0c0c0e] p-3.5 sm:p-4">
+                {isAndroidApp && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.07] bg-[#09090b] px-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-white">
+                        Android Auto-Detect (Spotify · YT Music · SoundCloud)
+                      </p>
+                      <p className="text-[11px] text-white/50">
+                        {androidMusicPermission
+                          ? shareMusicEnabled
+                            ? "Automatically detects music while studying."
+                            : "Auto-detect paused."
+                          : "Allow notification access once to auto-detect your music."}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {!androidMusicPermission ? (
+                        <button
+                          type="button"
+                          onClick={openAndroidNowPlayingSettings}
+                          className="h-8 rounded-lg bg-white px-3 text-xs font-semibold text-black transition hover:bg-white/90"
+                        >
+                          Enable Auto-Detect
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleRefreshAndroidMusic}
+                            className="h-8 rounded-lg border border-white/12 px-2.5 text-[11px] font-medium text-white/75 transition hover:text-white"
+                          >
+                            Refresh
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleToggleShareMusic}
+                            className={`h-8 rounded-lg px-2.5 text-[11px] font-semibold transition ${
+                              shareMusicEnabled
+                                ? "bg-emerald-400 text-black"
+                                : "border border-white/15 bg-[#111113] text-white/60"
+                            }`}
+                          >
+                            {shareMusicEnabled ? "On" : "Off"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <form
+                  onSubmit={handleShareMusicLink}
+                  className="flex items-center gap-2"
+                >
+                  <input
+                    type="text"
+                    value={musicLinkInput}
+                    onChange={(e) => setMusicLinkInput(e.target.value)}
+                    placeholder="Paste Spotify, YouTube Music, or SoundCloud link..."
+                    aria-label="Music link"
+                    className="h-9 min-w-0 flex-1 rounded-xl border border-white/10 bg-[#09090b] px-3 text-xs text-white placeholder:text-white/35 outline-none focus:border-white/25"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!musicLinkInput.trim() || isResolvingMusic}
+                    className="h-9 shrink-0 rounded-xl bg-white px-3.5 text-xs font-semibold text-black transition hover:bg-white/90 disabled:opacity-40"
+                  >
+                    {isResolvingMusic ? "..." : "Share"}
+                  </button>
+                </form>
+
+                <form
+                  onSubmit={handleSetManualTrack}
+                  className="flex flex-wrap items-center gap-2"
+                >
+                  <div className="inline-flex h-8 items-center rounded-lg border border-white/10 bg-[#09090b] p-0.5">
+                    {(
+                      [
+                        { id: "spotify", label: "Spotify" },
+                        { id: "youtube_music", label: "YT Music" },
+                        { id: "soundcloud", label: "SoundCloud" },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setManualPlatform(opt.id)}
+                        className={`h-7 rounded-md px-2 text-[11px] font-medium transition ${
+                          manualPlatform === opt.id
+                            ? "bg-white/15 text-white"
+                            : "text-white/45 hover:text-white/80"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <input
+                    type="text"
+                    value={manualTitleInput}
+                    onChange={(e) => setManualTitleInput(e.target.value)}
+                    maxLength={140}
+                    placeholder="Or type song / playlist name..."
+                    aria-label="Song or playlist name"
+                    className="h-8 min-w-[160px] flex-1 rounded-lg border border-white/10 bg-[#09090b] px-2.5 text-xs text-white placeholder:text-white/30 outline-none focus:border-white/25"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={!manualTitleInput.trim()}
+                    className="h-8 shrink-0 rounded-lg border border-white/15 px-3 text-xs font-medium text-white/85 transition hover:bg-white/5 disabled:opacity-35"
+                  >
+                    Set
+                  </button>
+                </form>
+              </div>
+            )}
+          </section>
+        );
+      })()}
     </main>
   );
 }

@@ -6,6 +6,7 @@ import { useNotifications } from "@/components/notification-provider";
 import UserAvatar from "@/components/user-avatar";
 import { evaluateAchievements, type Achievement } from "@/lib/achievements";
 import { notifyAvatarUpdated, resizeAvatarFile } from "@/lib/avatar";
+import { getPlatformMeta, isSafeHttpUrl } from "@/lib/now-playing";
 import { supabase } from "@/lib/supabase";
 
 type ProfileRow = {
@@ -15,6 +16,10 @@ type ProfileRow = {
   daily_goal_minutes?: number | null;
   studying_subject?: string | null;
   studying_started_at?: string | null;
+  listening_title?: string | null;
+  listening_artist?: string | null;
+  listening_platform?: string | null;
+  listening_url?: string | null;
 };
 
 type FriendshipRow = {
@@ -41,6 +46,10 @@ type LeaderboardEntry = {
   unlocked_badges: Achievement[];
   studying_subject: string | null;
   studying_started_at: string | null;
+  listening_title: string | null;
+  listening_artist: string | null;
+  listening_platform: string | null;
+  listening_url: string | null;
   today_subjects: SubjectSummary[];
   week_subjects: SubjectSummary[];
 };
@@ -169,7 +178,7 @@ export default function FriendsPage() {
     const fullProfileRes = await supabase
       .from("profiles")
       .select(
-        "user_id, username, avatar_url, daily_goal_minutes, studying_subject, studying_started_at"
+        "user_id, username, avatar_url, daily_goal_minutes, studying_subject, studying_started_at, listening_title, listening_artist, listening_platform, listening_url"
       )
       .eq("user_id", userId)
       .maybeSingle();
@@ -177,36 +186,49 @@ export default function FriendsPage() {
     if (fullProfileRes.error) {
       if (
         fullProfileRes.error.message.includes("avatar_url") ||
-        fullProfileRes.error.message.includes("studying_")
+        fullProfileRes.error.message.includes("studying_") ||
+        fullProfileRes.error.message.includes("listening_")
       ) {
-        const midRes = await supabase
+        const avatarStudyRes = await supabase
           .from("profiles")
           .select(
-            "user_id, username, daily_goal_minutes, studying_subject, studying_started_at"
+            "user_id, username, avatar_url, daily_goal_minutes, studying_subject, studying_started_at"
           )
           .eq("user_id", userId)
           .maybeSingle();
 
-        if (!midRes.error) {
-          myProfile = midRes.data as ProfileRow | null;
+        if (!avatarStudyRes.error) {
+          myProfile = avatarStudyRes.data as ProfileRow | null;
         } else {
-          const basicProfileRes = await supabase
+          const midRes = await supabase
             .from("profiles")
-            .select("user_id, username, daily_goal_minutes")
+            .select(
+              "user_id, username, daily_goal_minutes, studying_subject, studying_started_at"
+            )
             .eq("user_id", userId)
             .maybeSingle();
 
-          if (basicProfileRes.error) {
-            if (
-              basicProfileRes.error.message.includes("username") ||
-              basicProfileRes.error.code === "42703"
-            ) {
-              setSetupRequired(true);
-              setIsLoading(false);
-              return;
-            }
+          if (!midRes.error) {
+            myProfile = midRes.data as ProfileRow | null;
           } else {
-            myProfile = basicProfileRes.data as ProfileRow | null;
+            const basicProfileRes = await supabase
+              .from("profiles")
+              .select("user_id, username, daily_goal_minutes")
+              .eq("user_id", userId)
+              .maybeSingle();
+
+            if (basicProfileRes.error) {
+              if (
+                basicProfileRes.error.message.includes("username") ||
+                basicProfileRes.error.code === "42703"
+              ) {
+                setSetupRequired(true);
+                setIsLoading(false);
+                return;
+              }
+            } else {
+              myProfile = basicProfileRes.data as ProfileRow | null;
+            }
           }
         }
       } else if (
@@ -273,13 +295,24 @@ export default function FriendsPage() {
     };
     const liveStatusMap: Record<
       string,
-      { subject: string | null; startedAt: string | null }
+      {
+        subject: string | null;
+        startedAt: string | null;
+        listeningTitle: string | null;
+        listeningArtist: string | null;
+        listeningPlatform: string | null;
+        listeningUrl: string | null;
+      }
     > = {};
 
     if (myProfile) {
       liveStatusMap[userId] = {
         subject: myProfile.studying_subject ?? null,
         startedAt: myProfile.studying_started_at ?? null,
+        listeningTitle: myProfile.listening_title ?? null,
+        listeningArtist: myProfile.listening_artist ?? null,
+        listeningPlatform: myProfile.listening_platform ?? null,
+        listeningUrl: myProfile.listening_url ?? null,
       };
     }
 
@@ -287,26 +320,37 @@ export default function FriendsPage() {
       const fullRelatedRes = await supabase
         .from("profiles")
         .select(
-          "user_id, username, avatar_url, studying_subject, studying_started_at"
+          "user_id, username, avatar_url, studying_subject, studying_started_at, listening_title, listening_artist, listening_platform, listening_url"
         )
         .in("user_id", otherUserIds);
 
       let relatedProfiles: ProfileRow[] | null = null;
 
       if (fullRelatedRes.error) {
-        const midRelatedRes = await supabase
+        const avatarStudyRelatedRes = await supabase
           .from("profiles")
-          .select("user_id, username, studying_subject, studying_started_at")
+          .select(
+            "user_id, username, avatar_url, studying_subject, studying_started_at"
+          )
           .in("user_id", otherUserIds);
 
-        if (!midRelatedRes.error) {
-          relatedProfiles = (midRelatedRes.data || []) as ProfileRow[];
+        if (!avatarStudyRelatedRes.error) {
+          relatedProfiles = (avatarStudyRelatedRes.data || []) as ProfileRow[];
         } else {
-          const basicRelatedRes = await supabase
+          const midRelatedRes = await supabase
             .from("profiles")
-            .select("user_id, username")
+            .select("user_id, username, studying_subject, studying_started_at")
             .in("user_id", otherUserIds);
-          relatedProfiles = (basicRelatedRes.data || []) as ProfileRow[];
+
+          if (!midRelatedRes.error) {
+            relatedProfiles = (midRelatedRes.data || []) as ProfileRow[];
+          } else {
+            const basicRelatedRes = await supabase
+              .from("profiles")
+              .select("user_id, username")
+              .in("user_id", otherUserIds);
+            relatedProfiles = (basicRelatedRes.data || []) as ProfileRow[];
+          }
         }
       } else {
         relatedProfiles = (fullRelatedRes.data || []) as ProfileRow[];
@@ -320,6 +364,10 @@ export default function FriendsPage() {
         liveStatusMap[p.user_id] = {
           subject: p.studying_subject ?? null,
           startedAt: p.studying_started_at ?? null,
+          listeningTitle: p.listening_title ?? null,
+          listeningArtist: p.listening_artist ?? null,
+          listeningPlatform: p.listening_platform ?? null,
+          listeningUrl: p.listening_url ?? null,
         };
       });
     }
@@ -399,6 +447,10 @@ export default function FriendsPage() {
         const rawLive = liveStatusMap[memberId];
         let activeStudyingSubject: string | null = null;
         let activeStudyingStartedAt: string | null = null;
+        let activeListeningTitle: string | null = null;
+        let activeListeningArtist: string | null = null;
+        let activeListeningPlatform: string | null = null;
+        let activeListeningUrl: string | null = null;
 
         if (rawLive?.subject && rawLive?.startedAt) {
           const startedMs = new Date(rawLive.startedAt).getTime();
@@ -409,6 +461,12 @@ export default function FriendsPage() {
           ) {
             activeStudyingSubject = rawLive.subject;
             activeStudyingStartedAt = rawLive.startedAt;
+            activeListeningTitle = rawLive.listeningTitle ?? null;
+            activeListeningArtist = rawLive.listeningArtist ?? null;
+            activeListeningPlatform = rawLive.listeningPlatform ?? null;
+            activeListeningUrl = isSafeHttpUrl(rawLive.listeningUrl)
+              ? (rawLive.listeningUrl ?? null)
+              : null;
           }
         }
 
@@ -428,6 +486,10 @@ export default function FriendsPage() {
           unlocked_badges: unlockedBadges,
           studying_subject: activeStudyingSubject,
           studying_started_at: activeStudyingStartedAt,
+          listening_title: activeListeningTitle,
+          listening_artist: activeListeningArtist,
+          listening_platform: activeListeningPlatform,
+          listening_url: activeListeningUrl,
           today_subjects: todaySubjects,
           week_subjects: weekSubjects,
         };
@@ -1207,19 +1269,62 @@ export default function FriendsPage() {
                           </div>
 
                           {isStudyingNow && entry.studying_started_at && (
-                            <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300 tabular-nums">
-                              <span className="relative flex h-1.5 w-1.5">
-                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                              </span>
-                              <span className="truncate">
-                                Studying{" "}
-                                <strong>{entry.studying_subject}</strong> ·{" "}
-                                {formatLiveElapsed(
-                                  entry.studying_started_at,
-                                  nowMs
-                                )}
-                              </span>
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                              <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300 tabular-nums">
+                                <span className="relative flex h-1.5 w-1.5 shrink-0">
+                                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                </span>
+                                <span className="truncate">
+                                  Studying{" "}
+                                  <strong>{entry.studying_subject}</strong> ·{" "}
+                                  {formatLiveElapsed(
+                                    entry.studying_started_at,
+                                    nowMs
+                                  )}
+                                </span>
+                              </div>
+
+                              {entry.listening_title && (() => {
+                                const meta = getPlatformMeta(
+                                  entry.listening_platform
+                                );
+                                const badgeInner = (
+                                  <>
+                                    <span
+                                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                      style={{ backgroundColor: meta.dotColor }}
+                                    />
+                                    <span className="truncate">
+                                      🎵 {entry.listening_title}
+                                      {entry.listening_artist
+                                        ? ` — ${entry.listening_artist}`
+                                        : ""}{" "}
+                                      · {meta.label}
+                                    </span>
+                                  </>
+                                );
+
+                                return entry.listening_url ? (
+                                  <a
+                                    href={entry.listening_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition hover:brightness-110 ${meta.badgeClass}`}
+                                  >
+                                    {badgeInner}
+                                    <span className="shrink-0 text-[10px]">
+                                      ↗
+                                    </span>
+                                  </a>
+                                ) : (
+                                  <span
+                                    className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] ${meta.badgeClass}`}
+                                  >
+                                    {badgeInner}
+                                  </span>
+                                );
+                              })()}
                             </div>
                           )}
                         </div>
