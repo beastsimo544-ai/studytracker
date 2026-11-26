@@ -16,13 +16,6 @@ import {
   sendInstantSystemNotification,
   type NotificationPrefs,
 } from "@/lib/notifications";
-import {
-  hasAndroidNowPlayingPermission,
-  isAndroidNative,
-  loadShareMusicEnabled,
-  openAndroidNowPlayingSettings,
-  saveShareMusicEnabled,
-} from "@/lib/now-playing";
 import { supabase } from "@/lib/supabase";
 
 export default function SettingsPage() {
@@ -56,9 +49,6 @@ export default function SettingsPage() {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isAndroidApp, setIsAndroidApp] = useState(false);
-  const [androidMusicPermission, setAndroidMusicPermission] = useState(false);
-  const [shareMusicEnabled, setShareMusicEnabled] = useState(true);
 
   const handleSignOut = async () => {
     if (isSigningOut) return;
@@ -83,13 +73,6 @@ export default function SettingsPage() {
       setEmail(user.email ?? "");
       setNotifPrefs(loadNotificationPrefs());
       setNotifPermission(await getNotificationPermissionState());
-      setShareMusicEnabled(loadShareMusicEnabled());
-
-      const android = isAndroidNative();
-      setIsAndroidApp(android);
-      if (android) {
-        setAndroidMusicPermission(await hasAndroidNowPlayingPermission());
-      }
 
       const fullRes = await supabase
         .from("profiles")
@@ -119,20 +102,6 @@ export default function SettingsPage() {
 
     loadAccount();
   }, [router]);
-
-  useEffect(() => {
-    if (!isAndroidApp) return;
-
-    const refreshMusicPermission = async () => {
-      if (document.visibilityState === "hidden") return;
-      setAndroidMusicPermission(await hasAndroidNowPlayingPermission());
-    };
-
-    document.addEventListener("visibilitychange", refreshMusicPermission);
-    return () => {
-      document.removeEventListener("visibilitychange", refreshMusicPermission);
-    };
-  }, [isAndroidApp]);
 
   const updatePref = async (patch: Partial<NotificationPrefs>) => {
     const next = { ...notifPrefs, ...patch };
@@ -659,52 +628,6 @@ export default function SettingsPage() {
               }`}
             >
               {notifPrefs.friendLiveAlertsEnabled ? "On" : "Off"}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* MUSIC SHARING (SPOTIFY · YOUTUBE MUSIC · SOUNDCLOUD) */}
-      <section className="mt-4 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold">
-              Music Status (Spotify · YT Music · SoundCloud)
-            </h2>
-            <p className="mt-0.5 text-xs text-white/50">
-              {isAndroidApp
-                ? androidMusicPermission
-                  ? "Auto-detect active ✓ — shares what you listen to while studying."
-                  : "Permission needed on Android to auto-detect music."
-                : "Share what you're listening to on the Timer by pasting a Spotify, YouTube Music, or SoundCloud link (or use the Android app for automatic detection)."}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {isAndroidApp && !androidMusicPermission && (
-              <button
-                type="button"
-                onClick={openAndroidNowPlayingSettings}
-                className="h-9 rounded-xl bg-white px-3.5 text-xs font-semibold text-black transition hover:bg-white/90"
-              >
-                Enable Auto-Detect
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                const next = !shareMusicEnabled;
-                setShareMusicEnabled(next);
-                saveShareMusicEnabled(next);
-              }}
-              className={`h-8 min-w-[52px] shrink-0 rounded-full px-3 text-xs font-semibold transition ${
-                shareMusicEnabled
-                  ? "bg-emerald-400 text-black"
-                  : "border border-white/15 bg-[#09090b] text-white/60"
-              }`}
-            >
-              {shareMusicEnabled ? "On" : "Off"}
             </button>
           </div>
         </div>
