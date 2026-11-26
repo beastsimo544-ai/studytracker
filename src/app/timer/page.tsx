@@ -17,6 +17,11 @@ import { supabase } from "@/lib/supabase";
 
 type TimerMode = "stopwatch" | "pomodoro";
 type PomodoroPhase = "focus" | "break";
+type StudyTask = {
+  id: string;
+  text: string;
+  done: boolean;
+};
 
 function playCompletionChime() {
   if (typeof window === "undefined") return;
@@ -92,7 +97,10 @@ export default function TimerPage() {
   const [preset, setPreset] = useState<"25-5" | "50-10" | "custom">("25-5");
   const [completedPomodoros, setCompletedPomodoros] = useState(0);
   const [statusBanner, setStatusBanner] = useState("");
-  const [sessionNote, setSessionNote] = useState("");
+  const [tasks, setTasks] = useState<StudyTask[]>([]);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [isTodoOpen, setIsTodoOpen] = useState(false);
+  const [newTaskText, setNewTaskText] = useState("");
   const [isMinimalFocus, setIsMinimalFocus] = useState(false);
 
   const [accumulatedMs, setAccumulatedMs] = useState(0);
@@ -109,7 +117,14 @@ export default function TimerPage() {
 
   const isSavingRef = useRef(false);
   const autoCompletingRef = useRef(false);
-  const noteInputRef = useRef<HTMLInputElement | null>(null);
+  const newTaskInputRef = useRef<HTMLInputElement | null>(null);
+
+  const activeTask =
+    tasks.find((task) => task.id === activeTaskId && !task.done) ??
+    tasks.find((task) => !task.done) ??
+    null;
+  const remainingTasksCount = tasks.filter((task) => !task.done).length;
+  const completedTasksCount = tasks.length - remainingTasksCount;
 
   const isRunning = startedAt !== null;
   const hasSessionProgress = seconds > 0 || accumulatedMs > 0 || isRunning;
@@ -239,9 +254,6 @@ export default function TimerPage() {
           if (typeof parsedTimer.completedPomodoros === "number") {
             setCompletedPomodoros(parsedTimer.completedPomodoros);
           }
-          if (typeof parsedTimer.sessionNote === "string") {
-            setSessionNote(parsedTimer.sessionNote);
-          }
 
           if (typeof parsedTimer.accumulatedMs === "number") {
             const restoredAcc = Math.max(0, parsedTimer.accumulatedMs);
@@ -274,6 +286,34 @@ export default function TimerPage() {
         } catch (error) {
           console.error("Could not restore timer:", error);
           localStorage.removeItem("studyTimer");
+        }
+      }
+
+      // Restore saved timer to-do list
+      const rawTasks = localStorage.getItem("studyTimerTasks");
+      if (rawTasks) {
+        try {
+          const parsed = JSON.parse(rawTasks) as {
+            tasks?: StudyTask[];
+            activeTaskId?: string | null;
+          };
+          if (Array.isArray(parsed.tasks)) {
+            const validTasks = parsed.tasks.filter(
+              (item): item is StudyTask =>
+                Boolean(item) &&
+                typeof item.id === "string" &&
+                typeof item.text === "string" &&
+                typeof item.done === "boolean"
+            );
+            setTasks(validTasks);
+            setActiveTaskId(
+              typeof parsed.activeTaskId === "string"
+                ? parsed.activeTaskId
+                : null
+            );
+          }
+        } catch {
+          localStorage.removeItem("studyTimerTasks");
         }
       }
 
@@ -358,6 +398,15 @@ export default function TimerPage() {
     initTimerAndSubjects();
   }, []);
 
+  // Persist timer to-do list
+  useEffect(() => {
+    if (!hasHydrated) return;
+    localStorage.setItem(
+      "studyTimerTasks",
+      JSON.stringify({ tasks, activeTaskId })
+    );
+  }, [tasks, activeTaskId, hasHydrated]);
+
   // Save active/paused timer state
   useEffect(() => {
     if (!hasHydrated) return;
@@ -365,8 +414,7 @@ export default function TimerPage() {
     if (
       accumulatedMs === 0 &&
       startedAt === null &&
-      timerMode === "stopwatch" &&
-      !sessionNote.trim()
+      timerMode === "stopwatch"
     ) {
       localStorage.removeItem("studyTimer");
       return;
@@ -385,7 +433,6 @@ export default function TimerPage() {
         breakMinutes,
         preset,
         completedPomodoros,
-        sessionNote,
         accumulatedMs,
         startedAt,
         isRunning: startedAt !== null,
@@ -400,7 +447,6 @@ export default function TimerPage() {
     breakMinutes,
     preset,
     completedPomodoros,
-    sessionNote,
     accumulatedMs,
     startedAt,
     selectedSubject,
@@ -436,7 +482,7 @@ export default function TimerPage() {
         } = await supabase.auth.getUser();
 
         if (user && selectedSubject && completedDurationSeconds > 0) {
-          const cleanedNote = sessionNote.trim() || null;
+          const cleanedNote = activeTask?.text.trim() || null;
           const { error } = await insertSessionWithOptionalNote({
             subject: selectedSubject,
             duration: completedDurationSeconds,
@@ -445,7 +491,6 @@ export default function TimerPage() {
           });
 
           if (!error) {
-            setSessionNote("");
             const msg = `Focus block complete (${focusMinutes}m saved)! Time for a ${breakMinutes}m break.`;
             setStatusBanner(msg);
             toast.success(
@@ -481,7 +526,7 @@ export default function TimerPage() {
     [
       pomodoroPhase,
       selectedSubject,
-      sessionNote,
+      activeTask,
       focusMinutes,
       breakMinutes,
       broadcastLiveStatus,
@@ -683,7 +728,7 @@ export default function TimerPage() {
         return;
       }
 
-      const cleanedNote = sessionNote.trim() || null;
+      const cleanedNote = activeTask?.text.trim() || null;
       const { error } = await insertSessionWithOptionalNote({
         subject: selectedSubject,
         duration: finalSeconds,
@@ -703,7 +748,6 @@ export default function TimerPage() {
       setStartedAt(null);
       setAccumulatedMs(0);
       setSeconds(0);
-      setSessionNote("");
       if (timerMode === "stopwatch") {
         localStorage.removeItem("studyTimer");
       }
@@ -759,6 +803,71 @@ export default function TimerPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isMinimalFocus]);
+
+  const toggleTodoDrawer = () => {
+    setIsTodoOpen((prev) => {
+      const next = !prev;
+      if (next && tasks.length === 0) {
+        setTimeout(() => {
+          newTaskInputRef.current?.focus();
+        }, 0);
+      }
+      return next;
+    });
+  };
+
+  const handleAddTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = newTaskText.trim().slice(0, 140);
+    if (!text) return;
+
+    const newTask: StudyTask = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      text,
+      done: false,
+    };
+
+    setTasks((prev) => [...prev, newTask]);
+    if (!activeTask) {
+      setActiveTaskId(newTask.id);
+    }
+    setNewTaskText("");
+    newTaskInputRef.current?.focus();
+  };
+
+  const toggleTaskDone = (taskId: string) => {
+    const target = tasks.find((t) => t.id === taskId);
+    if (!target) return;
+
+    const willMarkDone = !target.done;
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === taskId ? { ...task, done: !task.done } : task
+      )
+    );
+
+    if (willMarkDone && activeTask?.id === taskId) {
+      toast.success("Task completed!", target.text);
+    }
+  };
+
+  const selectActiveTask = (taskId: string) => {
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === taskId && task.done ? { ...task, done: false } : task
+      )
+    );
+    setActiveTaskId(taskId);
+    setIsTodoOpen(false);
+  };
+
+  const deleteTask = (taskId: string) => {
+    setTasks((prev) => prev.filter((task) => task.id !== taskId));
+  };
+
+  const clearCompletedTasks = () => {
+    setTasks((prev) => prev.filter((task) => !task.done));
+  };
 
   const enterMinimalFocus = () => {
     if (timerMode === "pomodoro" && pomodoroPhase === "break") {
@@ -846,6 +955,22 @@ export default function TimerPage() {
                   ))
                 )}
               </select>
+            </div>
+          )}
+
+          {activeTask && (
+            <div className="mt-4 flex justify-center">
+              <div className="inline-flex max-w-xs items-center gap-2 rounded-full border border-white/10 bg-[#111113] px-3.5 py-1.5">
+                <button
+                  type="button"
+                  onClick={() => toggleTaskDone(activeTask.id)}
+                  aria-label="Complete current task"
+                  className="h-3.5 w-3.5 shrink-0 rounded-full border border-white/40 transition hover:border-emerald-400 hover:bg-emerald-400/20"
+                />
+                <span className="truncate text-xs font-medium text-white/85">
+                  {activeTask.text}
+                </span>
+              </div>
             </div>
           )}
 
@@ -1152,65 +1277,257 @@ export default function TimerPage() {
                 )}
               </div>
 
-              {/* Right Segment: Session Note */}
+              {/* Right Segment: Current Task & Hidden To-Do Trigger */}
               <div
-                onClick={() => noteInputRef.current?.focus()}
-                className="cursor-text px-4 py-2.5 transition hover:bg-white/[0.02] focus-within:bg-white/[0.03]"
+                role="button"
+                tabIndex={0}
+                aria-expanded={isTodoOpen}
+                onClick={toggleTodoDrawer}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    toggleTodoDrawer();
+                  }
+                }}
+                className="cursor-pointer px-4 py-2.5 transition hover:bg-white/[0.025] focus-visible:bg-white/[0.03] focus-visible:outline-none"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-semibold tracking-wider uppercase text-white/40">
-                    Session Note
+                    Current Task
                   </span>
-                  <span className="text-[10px] tabular-nums text-white/30">
-                    {sessionNote.length > 0
-                      ? `${sessionNote.length}/140`
-                      : "Optional"}
-                  </span>
+                  <div className="flex items-center gap-1.5 text-[10px] tabular-nums text-white/35">
+                    <span>
+                      {tasks.length === 0
+                        ? "To-do"
+                        : remainingTasksCount === 0
+                          ? "All done"
+                          : `${remainingTasksCount} left`}
+                    </span>
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                      className={`h-3 w-3 transition-transform ${
+                        isTodoOpen ? "rotate-180" : ""
+                      }`}
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </div>
                 </div>
 
-                <div className="relative mt-1 flex h-6 items-center">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                    className="mr-2 h-3.5 w-3.5 shrink-0 text-white/35"
-                  >
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                  </svg>
-
-                  <input
-                    ref={noteInputRef}
-                    type="text"
-                    value={sessionNote}
-                    onChange={(e) => setSessionNote(e.target.value)}
-                    maxLength={140}
-                    placeholder="What are you working on?"
-                    aria-label="Session Note"
-                    className="h-6 w-full bg-transparent pr-6 text-sm text-white placeholder:text-white/30 outline-none"
-                  />
-
-                  {sessionNote.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSessionNote("");
-                        noteInputRef.current?.focus();
-                      }}
-                      aria-label="Clear note"
-                      className="absolute right-0 flex h-5 w-5 items-center justify-center rounded-full text-[11px] text-white/40 transition hover:bg-white/10 hover:text-white"
-                    >
-                      ✕
-                    </button>
+                <div className="mt-1 flex h-6 items-center justify-between gap-2">
+                  {activeTask ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleTaskDone(activeTask.id);
+                        }}
+                        aria-label="Complete current task"
+                        className="h-4 w-4 shrink-0 rounded-full border border-white/35 transition hover:border-emerald-400 hover:bg-emerald-400/20"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-left text-sm font-medium text-white">
+                        {activeTask.text}
+                      </span>
+                      {remainingTasksCount > 1 && (
+                        <span className="shrink-0 rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white/55">
+                          +{remainingTasksCount - 1}
+                        </span>
+                      )}
+                    </>
+                  ) : tasks.length > 0 ? (
+                    <div className="flex min-w-0 items-center gap-2">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                        className="h-4 w-4 shrink-0 text-emerald-400"
+                      >
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                      <span className="truncate text-sm font-medium text-emerald-400">
+                        All tasks completed
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex min-w-0 items-center gap-2 text-white/35">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                        className="h-3.5 w-3.5 shrink-0"
+                      >
+                        <path d="M9 11l3 3L22 4" />
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                      </svg>
+                      <span className="truncate text-sm">Add a task...</span>
+                    </div>
                   )}
                 </div>
               </div>
             </div>
+
+            {/* Collapsible Hidden To-Do List Drawer */}
+            {isTodoOpen && (
+              <div className="border-t border-white/[0.08] bg-[#0c0c0e] p-3.5">
+                <form
+                  onSubmit={handleAddTask}
+                  className="flex items-center gap-2"
+                >
+                  <input
+                    ref={newTaskInputRef}
+                    type="text"
+                    value={newTaskText}
+                    onChange={(e) => setNewTaskText(e.target.value)}
+                    maxLength={140}
+                    placeholder="Add a task to your to-do list..."
+                    aria-label="New task"
+                    className="h-9 min-w-0 flex-1 rounded-xl border border-white/10 bg-[#09090b] px-3 text-xs text-white placeholder:text-white/35 outline-none focus:border-white/25 sm:text-sm"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newTaskText.trim()}
+                    className="h-9 shrink-0 rounded-xl bg-white px-3.5 text-xs font-semibold text-black transition hover:bg-white/90 disabled:opacity-40"
+                  >
+                    Add
+                  </button>
+                </form>
+
+                <div className="mt-3 max-h-52 space-y-1.5 overflow-y-auto">
+                  {tasks.length === 0 ? (
+                    <p className="py-2 text-center text-xs text-white/40">
+                      Add tasks above — only the one you&apos;re working on will
+                      show while the timer runs.
+                    </p>
+                  ) : (
+                    tasks.map((task) => {
+                      const isActive = activeTask?.id === task.id;
+                      return (
+                        <div
+                          key={task.id}
+                          className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 transition ${
+                            isActive
+                              ? "border-emerald-500/30 bg-emerald-500/[0.07]"
+                              : "border-white/[0.06] bg-[#09090b]/80 hover:border-white/15"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleTaskDone(task.id)}
+                            aria-label={
+                              task.done
+                                ? `Mark "${task.text}" incomplete`
+                                : `Mark "${task.text}" complete`
+                            }
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition ${
+                              task.done
+                                ? "border-emerald-400 bg-emerald-400 text-black"
+                                : "border-white/35 hover:border-emerald-400"
+                            }`}
+                          >
+                            {task.done && (
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                                className="h-2.5 w-2.5"
+                              >
+                                <path d="M20 6 9 17l-5-5" />
+                              </svg>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => selectActiveTask(task.id)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <span
+                              className={`block truncate text-xs sm:text-sm ${
+                                task.done
+                                  ? "text-white/35 line-through"
+                                  : isActive
+                                    ? "font-medium text-white"
+                                    : "text-white/80"
+                              }`}
+                            >
+                              {task.text}
+                            </span>
+                          </button>
+
+                          {isActive ? (
+                            <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                              Working on
+                            </span>
+                          ) : (
+                            !task.done && (
+                              <button
+                                type="button"
+                                onClick={() => selectActiveTask(task.id)}
+                                className="shrink-0 text-[10px] font-medium text-white/35 transition hover:text-white/75"
+                              >
+                                Focus
+                              </button>
+                            )
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => deleteTask(task.id)}
+                            aria-label={`Delete task "${task.text}"`}
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[11px] text-white/30 transition hover:bg-white/10 hover:text-rose-300"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-2.5 text-[11px]">
+                  <span className="tabular-nums text-white/40">
+                    {completedTasksCount}/{tasks.length} done
+                  </span>
+                  <div className="flex items-center gap-3">
+                    {completedTasksCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={clearCompletedTasks}
+                        className="text-white/45 transition hover:text-white"
+                      >
+                        Clear done
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsTodoOpen(false)}
+                      className="font-medium text-white/65 transition hover:text-white"
+                    >
+                      Hide list
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
