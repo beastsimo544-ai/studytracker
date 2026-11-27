@@ -349,10 +349,13 @@ export default function NotificationProvider({
   // Auth + Realtime subscriptions for Friend Requests, Accepted Friends, Live Studying, Exams & Achievements
   useEffect(() => {
     let activeUid: string | null = null;
+    let isUnmounted = false;
+    let setupGeneration = 0;
     let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 
     const setupForUser = async (uid: string) => {
       activeUid = uid;
+      const gen = ++setupGeneration;
       setUserId(uid);
       prefsRef.current = loadNotificationPrefs();
 
@@ -502,12 +505,20 @@ export default function NotificationProvider({
       }
 
       // 4. Subscribe to live friend requests, accepts, and friends starting study sessions
+      if (isUnmounted || gen !== setupGeneration) return;
+
       if (realtimeChannel) {
-        supabase.removeChannel(realtimeChannel);
+        const oldChannel = realtimeChannel;
+        realtimeChannel = null;
+        await supabase.removeChannel(oldChannel);
       }
 
+      if (isUnmounted || gen !== setupGeneration) return;
+
       realtimeChannel = supabase
-        .channel(`studytracker-notifs-${uid}`)
+        .channel(
+          `studytracker-notifs-${uid}-${gen}-${Math.random().toString(36).slice(2, 7)}`
+        )
         .on(
           "postgres_changes",
           {
@@ -646,7 +657,7 @@ export default function NotificationProvider({
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (user) {
+      if (user && !isUnmounted && user.id !== activeUid) {
         await setupForUser(user.id);
       }
     };
@@ -656,11 +667,13 @@ export default function NotificationProvider({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (isUnmounted) return;
       const nextUid = session?.user?.id ?? null;
       if (nextUid && nextUid !== activeUid) {
         setupForUser(nextUid);
       } else if (!nextUid) {
         activeUid = null;
+        setupGeneration += 1;
         setUserId(null);
         setNotifications([]);
         if (realtimeChannel) {
@@ -671,9 +684,12 @@ export default function NotificationProvider({
     });
 
     return () => {
+      isUnmounted = true;
+      setupGeneration += 1;
       subscription.unsubscribe();
       if (realtimeChannel) {
         supabase.removeChannel(realtimeChannel);
+        realtimeChannel = null;
       }
     };
   }, [pushToast, upsertNotification]);
