@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useNotifications } from "@/components/notification-provider";
+import StudyCardModal from "@/components/study-card-modal";
 import { evaluateAchievements } from "@/lib/achievements";
 import { resolveSubjectColor } from "@/lib/subject-colors";
 import { supabase } from "@/lib/supabase";
@@ -46,6 +47,9 @@ export default function Dashboard() {
   const [dailyGoalMinutes, setDailyGoalMinutes] = useState(120);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [showShareCard, setShowShareCard] = useState(false);
 
   const [exams, setExams] = useState<ExamItem[]>([]);
   const [examsUseLocalFallback, setExamsUseLocalFallback] = useState(false);
@@ -71,16 +75,55 @@ export default function Dashboard() {
 
       setCurrentUserId(user.id);
 
-      const { data: profile, error: profileError } = await supabase
+      const fullProfileRes = await supabase
         .from("profiles")
-        .select("daily_goal_minutes")
+        .select("daily_goal_minutes, username, avatar_url")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (profileError) {
-        console.error(profileError);
-      } else if (profile) {
-        setDailyGoalMinutes(profile.daily_goal_minutes);
+      let resolvedProfile: {
+        daily_goal_minutes?: number | null;
+        username?: string | null;
+        avatar_url?: string | null;
+      } | null = null;
+
+      if (
+        fullProfileRes.error &&
+        (fullProfileRes.error.message.includes("avatar_url") ||
+          fullProfileRes.error.message.includes("username"))
+      ) {
+        const midProfileRes = await supabase
+          .from("profiles")
+          .select("daily_goal_minutes, username")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (!midProfileRes.error) {
+          resolvedProfile = midProfileRes.data;
+        } else {
+          const basicProfileRes = await supabase
+            .from("profiles")
+            .select("daily_goal_minutes")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          if (basicProfileRes.error) {
+            console.error(basicProfileRes.error);
+          } else {
+            resolvedProfile = basicProfileRes.data;
+          }
+        }
+      } else if (fullProfileRes.error) {
+        console.error(fullProfileRes.error);
+      } else {
+        resolvedProfile = fullProfileRes.data;
+      }
+
+      if (resolvedProfile) {
+        if (typeof resolvedProfile.daily_goal_minutes === "number") {
+          setDailyGoalMinutes(resolvedProfile.daily_goal_minutes);
+        }
+        setUsername(resolvedProfile.username ?? null);
+        setAvatarUrl(resolvedProfile.avatar_url ?? null);
       } else {
         await supabase.from("profiles").upsert(
           {
@@ -526,6 +569,44 @@ export default function Dashboard() {
   const achievements = evaluateAchievements(sessions);
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
 
+  const summarizePeriodSubjects = (list: StudySession[]) => {
+    const totals: Record<string, number> = {};
+    list.forEach((s) => {
+      totals[s.subject] = (totals[s.subject] || 0) + s.duration;
+    });
+    return Object.entries(totals)
+      .map(([subject, seconds]) => ({
+        subject,
+        seconds,
+        color: resolveSubjectColor(subject, colorBySubject),
+      }))
+      .sort((a, b) => b.seconds - a.seconds);
+  };
+
+  const todaySubjectSummary = summarizePeriodSubjects(
+    sessions.filter((session) => {
+      const sessionDate = new Date(session.created_at);
+      return (
+        sessionDate.getFullYear() === today.getFullYear() &&
+        sessionDate.getMonth() === today.getMonth() &&
+        sessionDate.getDate() === today.getDate()
+      );
+    })
+  );
+
+  const weekSubjectSummary = summarizePeriodSubjects(
+    sessions.filter((session) => {
+      const sessionDate = new Date(session.created_at);
+      return sessionDate >= startOfWeek && sessionDate <= endOfToday;
+    })
+  );
+
+  const weekCardDays = weekData.map((d) => ({
+    day: d.day,
+    seconds: d.seconds,
+    color: d.segments[0]?.color ?? "#10b981",
+  }));
+
   const stats = [
     { label: "Today", value: formatDuration(todaySeconds) },
     { label: "This week", value: formatDuration(weekSeconds) },
@@ -546,7 +627,7 @@ export default function Dashboard() {
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 sm:py-10">
       {/* HEADER */}
-      <section className="flex items-center justify-between gap-3">
+      <section className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             Dashboard
@@ -556,12 +637,36 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <Link
-          href="/timer"
-          className="flex h-10 shrink-0 items-center rounded-xl bg-white px-4 text-xs font-semibold text-black transition hover:bg-white/90 sm:h-11 sm:px-5 sm:text-sm"
-        >
-          Start Studying
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowShareCard(true)}
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-white/15 bg-[#111113] px-3.5 text-xs font-semibold text-white/90 transition hover:border-white/30 hover:bg-white/[0.06] sm:h-11 sm:px-4 sm:text-sm"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className="h-3.5 w-3.5"
+            >
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+              <polyline points="16 6 12 2 8 6" />
+              <line x1="12" y1="2" x2="12" y2="15" />
+            </svg>
+            <span>Share Card</span>
+          </button>
+
+          <Link
+            href="/timer"
+            className="flex h-10 shrink-0 items-center rounded-xl bg-white px-4 text-xs font-semibold text-black transition hover:bg-white/90 sm:h-11 sm:px-5 sm:text-sm"
+          >
+            Start Studying
+          </Link>
+        </div>
       </section>
 
       {/* 2x2 MOBILE / 4-COL DESKTOP OVERVIEW METRICS */}
@@ -1073,6 +1178,29 @@ export default function Dashboard() {
           )}
         </div>
       </section>
+
+      <StudyCardModal
+        open={showShareCard}
+        onClose={() => setShowShareCard(false)}
+        data={{
+          username,
+          avatarUrl,
+          todaySeconds,
+          weekSeconds,
+          dailyAvgSeconds: dailyAverageSeconds,
+          dailyGoalSeconds,
+          currentStreak,
+          longestStreak,
+          unlockedIcons: achievements
+            .filter((a) => a.unlocked)
+            .map((a) => a.icon),
+          unlockedCount,
+          totalBadges: achievements.length,
+          todaySubjects: todaySubjectSummary,
+          weekSubjects: weekSubjectSummary,
+          weekDays: weekCardDays,
+        }}
+      />
     </main>
   );
 }
