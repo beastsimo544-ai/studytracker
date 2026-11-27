@@ -200,6 +200,7 @@ export default function TimerPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
   const isSavingRef = useRef(false);
   const autoCompletingRef = useRef(false);
@@ -825,6 +826,17 @@ export default function TimerPage() {
     };
   }, [hasSessionProgress, timerMode, pomodoroPhase]);
 
+  useEffect(() => {
+    if (!isResetConfirmOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsResetConfirmOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isResetConfirmOpen]);
+
   const formatTime = (totalSeconds: number) => {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -901,12 +913,25 @@ export default function TimerPage() {
     setAccumulatedMs(0);
     setSeconds(0);
     setStatusBanner("");
+    setIsResetConfirmOpen(false);
     if (timerMode === "stopwatch") {
       localStorage.removeItem("studyTimer");
     }
     clearOngoingTimerNotification();
     cancelPomodoroFinishNotification();
     broadcastLiveStatus(null);
+  };
+
+  const requestResetTimer = () => {
+    if (!hasSessionProgress) {
+      resetTimer();
+      return;
+    }
+    setIsResetConfirmOpen(true);
+  };
+
+  const confirmResetTimer = () => {
+    resetTimer();
   };
 
   const skipBreak = () => {
@@ -1137,6 +1162,67 @@ export default function TimerPage() {
 
   const isBreakPhase = timerMode === "pomodoro" && pomodoroPhase === "break";
 
+  const resetConfirmModal = isResetConfirmOpen ? (
+    <div
+      onClick={() => setIsResetConfirmOpen(false)}
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reset-timer-confirm-title"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#111113] p-5 text-left shadow-2xl"
+      >
+        <h2
+          id="reset-timer-confirm-title"
+          className="text-base font-semibold text-white"
+        >
+          Reset timer?
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-white/65">
+          {isBreakPhase ? (
+            "This will reset your current break timer back to the start."
+          ) : seconds > 0 ? (
+            <>
+              You&apos;ll lose{" "}
+              <span className="font-mono font-semibold text-white tabular-nums">
+                {formatTime(seconds)}
+              </span>{" "}
+              of unsaved progress
+              {selectedSubject ? (
+                <>
+                  {" "}
+                  in <span className="font-medium text-white">{selectedSubject}</span>
+                </>
+              ) : null}
+              . This cannot be undone.
+            </>
+          ) : (
+            "This will stop and reset your current study session."
+          )}
+        </p>
+
+        <div className="mt-5 flex items-center justify-end gap-2.5">
+          <button
+            type="button"
+            onClick={() => setIsResetConfirmOpen(false)}
+            className="h-9 rounded-xl border border-white/15 bg-white/5 px-4 text-xs font-semibold text-white transition hover:bg-white/10 sm:text-sm"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={confirmResetTimer}
+            className="h-9 rounded-xl bg-red-500 px-4 text-xs font-semibold text-white transition hover:bg-red-400 sm:text-sm"
+          >
+            Reset timer
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   // Distraction-free Minimal Focus Mode
   if (isMinimalFocus) {
     return (
@@ -1234,7 +1320,8 @@ export default function TimerPage() {
 
           <div className="mx-auto grid max-w-sm grid-cols-[1fr_1.35fr_1fr] gap-2.5">
             <button
-              onClick={resetTimer}
+              type="button"
+              onClick={requestResetTimer}
               className="h-11 rounded-xl border border-white/15 text-xs font-semibold text-white/80 transition hover:bg-white/5 sm:text-sm"
             >
               Reset
@@ -1266,6 +1353,7 @@ export default function TimerPage() {
             </button>
           </div>
         </div>
+        {resetConfirmModal}
       </main>
     );
   }
@@ -1835,7 +1923,8 @@ export default function TimerPage() {
         {/* Single-Row Balanced Controls (Aligned with Session Pod) */}
         <div className="mx-auto grid max-w-lg grid-cols-[1fr_1.35fr_1fr] gap-2.5 sm:gap-3">
           <button
-            onClick={resetTimer}
+            type="button"
+            onClick={requestResetTimer}
             className="h-11 rounded-xl border border-white/15 text-xs font-semibold text-white/80 transition hover:bg-white/5 sm:text-sm"
           >
             Reset
@@ -1884,6 +1973,7 @@ export default function TimerPage() {
           )}
         </div>
       </div>
+      {resetConfirmModal}
     </main>
   );
 }
