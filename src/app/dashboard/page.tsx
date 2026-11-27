@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useNotifications } from "@/components/notification-provider";
 import StudyCardModal from "@/components/study-card-modal";
+import StudyHeatmap from "@/components/study-heatmap";
 import { evaluateAchievements } from "@/lib/achievements";
 import { resolveSubjectColor } from "@/lib/subject-colors";
 import { supabase } from "@/lib/supabase";
@@ -1037,6 +1038,8 @@ export default function Dashboard() {
           </div>
         </div>
       </section>
+
+      <StudyHeatmap sessions={sessions} dailyGoalMinutes={dailyGoalMinutes} />
 
       {/* COLOR-CODED STUDY BY SUBJECT */}
       <section className="mt-6 sm:mt-8">

@@ -7,7 +7,7 @@ export type ChampionQuoteInfo = {
   username: string;
   avatarUrl: string | null;
   isSelf: boolean;
-  weekSecondsLabel: string;
+  scoreLabel: string;
   quote: string | null;
 };
 
@@ -28,8 +28,8 @@ export default function ChampionQuoteBanner({
   if (!champion) {
     return (
       <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3.5 text-xs text-amber-200/80">
-        👑 Study this week to claim <strong>#1</strong> and post a Champion
-        Quote for everyone to see.
+        👑 Study today to claim <strong>#1</strong> and post today&apos;s
+        Champion Quote for everyone to see.
       </div>
     );
   }
@@ -62,7 +62,7 @@ export default function ChampionQuoteBanner({
               @{champion.username}
             </span>
             <span className="text-[11px] tabular-nums text-amber-200/80">
-              · {champion.weekSecondsLabel}
+              · {champion.scoreLabel}
             </span>
           </div>
         </div>
@@ -89,7 +89,7 @@ export default function ChampionQuoteBanner({
             onChange={(e) => setDraft(e.target.value)}
             maxLength={140}
             autoFocus
-            placeholder="Drop a quote for everyone to see..."
+            placeholder="Drop today's quote for everyone to see..."
             className="h-10 w-full rounded-xl border border-amber-400/25 bg-[#09090b] px-3.5 text-sm text-white placeholder:text-white/35 outline-none focus:border-amber-400/50"
           />
 
@@ -122,11 +122,11 @@ export default function ChampionQuoteBanner({
         </p>
       ) : champion.isSelf ? (
         <p className="mt-2.5 text-xs text-white/55">
-          You&apos;re #1! Write a quote to motivate your friends.
+          You&apos;re #1 today! Write today&apos;s quote to motivate everyone.
         </p>
       ) : (
         <p className="mt-2.5 text-xs text-white/45">
-          @{champion.username} hasn&apos;t written a champion quote yet.
+          @{champion.username} hasn&apos;t written today&apos;s quote yet.
         </p>
       )}
     </div>

@@ -34,6 +34,7 @@ type StudyGroupRow = {
   created_by: string;
   champion_quote: string | null;
   champion_quote_author_id: string | null;
+  champion_quote_updated_at?: string | null;
   created_at: string;
 };
 
@@ -253,13 +254,32 @@ function buildLeaderboardEntries(
   });
 }
 
-function getWeeklyChampion(entries: LeaderboardEntry[]) {
+function isTodayIso(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return toLocalDateKey(parsed) === toLocalDateKey(new Date());
+}
+
+function parseDailyProfileQuote(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})\|([\s\S]*)$/);
+  if (match) {
+    if (match[1] !== toLocalDateKey(new Date())) {
+      return null;
+    }
+    return match[2].trim() || null;
+  }
+  return raw.trim() || null;
+}
+
+function getDailyChampion(entries: LeaderboardEntry[]) {
   const ranked = [...entries]
-    .filter((entry) => entry.week_seconds > 0)
+    .filter((entry) => entry.today_seconds > 0)
     .sort(
       (a, b) =>
-        b.week_seconds - a.week_seconds ||
         b.today_seconds - a.today_seconds ||
+        b.week_seconds - a.week_seconds ||
         a.username.localeCompare(b.username)
     );
   return ranked[0] ?? null;
@@ -461,7 +481,7 @@ export default function FriendsPage() {
           supabase
             .from("study_groups")
             .select(
-              "id, name, invite_code, created_by, champion_quote, champion_quote_author_id, created_at"
+              "id, name, invite_code, created_by, champion_quote, champion_quote_author_id, champion_quote_updated_at, created_at"
             )
             .in("id", myGroupIds)
             .order("created_at", { ascending: false }),
@@ -1127,9 +1147,12 @@ export default function FriendsPage() {
     setIsSavingQuote(true);
 
     const cleaned = nextQuote.trim().slice(0, 140) || null;
+    const payloadQuote = cleaned
+      ? `${toLocalDateKey(new Date())}|${cleaned}`
+      : null;
     const { error } = await supabase
       .from("profiles")
-      .update({ champion_quote: cleaned })
+      .update({ champion_quote: payloadQuote })
       .eq("user_id", currentUserId);
 
     setIsSavingQuote(false);
@@ -1147,7 +1170,7 @@ export default function FriendsPage() {
     }
 
     toast.success(
-      cleaned ? "Champion quote updated! 👑" : "Champion quote cleared"
+      cleaned ? "Today's champion quote updated! 👑" : "Champion quote cleared"
     );
     await loadFriendsData(currentUserId);
     return true;
@@ -1178,7 +1201,7 @@ export default function FriendsPage() {
     }
 
     toast.success(
-      cleaned ? "Group champion quote updated! 👑" : "Group quote cleared"
+      cleaned ? "Today's group quote updated! 👑" : "Group quote cleared"
     );
     await loadFriendsData(currentUserId);
     return true;
@@ -1218,7 +1241,7 @@ export default function FriendsPage() {
     1
   );
 
-  const friendsWeeklyChampion = getWeeklyChampion(leaderboard);
+  const friendsDailyChampion = getDailyChampion(leaderboard);
 
   const sortedGroupLeaderboard = sortLeaderboard(groupLeaderboard);
   const maxGroupPeriodSeconds = Math.max(
@@ -1227,7 +1250,7 @@ export default function FriendsPage() {
     ),
     1
   );
-  const groupWeeklyChampion = getWeeklyChampion(groupLeaderboard);
+  const groupDailyChampion = getDailyChampion(groupLeaderboard);
 
   const renderLeaderboardCards = (
     entries: LeaderboardEntry[],
@@ -1804,20 +1827,22 @@ export default function FriendsPage() {
             )}
           </section>
 
-          {/* FRIENDS #1 CHAMPION QUOTE */}
+          {/* FRIENDS #1 DAILY CHAMPION QUOTE */}
           <section className="mt-5 sm:mt-6">
             <ChampionQuoteBanner
-              scopeLabel="Friends #1 This Week"
+              scopeLabel="Friends #1 Today"
               champion={
-                friendsWeeklyChampion
+                friendsDailyChampion
                   ? {
-                      username: friendsWeeklyChampion.username,
-                      avatarUrl: friendsWeeklyChampion.avatar_url,
-                      isSelf: friendsWeeklyChampion.is_self,
-                      weekSecondsLabel: formatDuration(
-                        friendsWeeklyChampion.week_seconds
+                      username: friendsDailyChampion.username,
+                      avatarUrl: friendsDailyChampion.avatar_url,
+                      isSelf: friendsDailyChampion.is_self,
+                      scoreLabel: formatDuration(
+                        friendsDailyChampion.today_seconds
                       ),
-                      quote: friendsWeeklyChampion.champion_quote,
+                      quote: parseDailyProfileQuote(
+                        friendsDailyChampion.champion_quote
+                      ),
                     }
                   : null
               }
@@ -1873,7 +1898,7 @@ export default function FriendsPage() {
                 sortedFriendsLeaderboard,
                 maxFriendsPeriodSeconds,
                 true,
-                friendsWeeklyChampion?.user_id ?? null
+                friendsDailyChampion?.user_id ?? null
               )}
             </div>
 
@@ -2075,21 +2100,24 @@ export default function FriendsPage() {
                       </div>
                     </div>
 
-                    {/* GROUP #1 CHAMPION QUOTE */}
+                    {/* GROUP #1 DAILY CHAMPION QUOTE */}
                     <ChampionQuoteBanner
-                      scopeLabel="Group #1 This Week"
+                      scopeLabel="Group #1 Today"
                       champion={
-                        groupWeeklyChampion
+                        groupDailyChampion
                           ? {
-                              username: groupWeeklyChampion.username,
-                              avatarUrl: groupWeeklyChampion.avatar_url,
-                              isSelf: groupWeeklyChampion.is_self,
-                              weekSecondsLabel: formatDuration(
-                                groupWeeklyChampion.week_seconds
+                              username: groupDailyChampion.username,
+                              avatarUrl: groupDailyChampion.avatar_url,
+                              isSelf: groupDailyChampion.is_self,
+                              scoreLabel: formatDuration(
+                                groupDailyChampion.today_seconds
                               ),
                               quote:
                                 selectedGroup.champion_quote_author_id ===
-                                groupWeeklyChampion.user_id
+                                  groupDailyChampion.user_id &&
+                                isTodayIso(
+                                  selectedGroup.champion_quote_updated_at
+                                )
                                   ? selectedGroup.champion_quote
                                   : null,
                             }
@@ -2148,7 +2176,7 @@ export default function FriendsPage() {
                           sortedGroupLeaderboard,
                           maxGroupPeriodSeconds,
                           false,
-                          groupWeeklyChampion?.user_id ?? null
+                          groupDailyChampion?.user_id ?? null
                         )}
                       </div>
                     </div>
