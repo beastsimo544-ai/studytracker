@@ -13,10 +13,14 @@ const stashTargets = [
     src: path.resolve("public/StudyTracker-Extension.zip"),
     stash: path.resolve(".stashed-StudyTracker-Extension.zip"),
   },
+  {
+    src: path.resolve("src/app/api"),
+    stash: path.resolve(".stashed-api"),
+  },
 ];
 
-// Temporarily stash large downloadable archives outside public/ during mobile build
-// so the Android APK never bundles duplicate copies inside its assets.
+// Temporarily stash large downloadable archives and Next.js server API routes
+// during mobile static export so the Android APK never bundles them or fails export.
 const stashedItems = [];
 for (const target of stashTargets) {
   if (fs.existsSync(target.src)) {

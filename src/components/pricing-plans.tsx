@@ -151,6 +151,7 @@ export default function PricingPlans({
         settings: {
           displayMode: "overlay",
           theme: "dark",
+          successUrl: `${window.location.origin}/settings?checkout=success`,
         },
       });
     } catch {

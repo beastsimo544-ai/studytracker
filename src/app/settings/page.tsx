@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 import { useNotifications } from "@/components/notification-provider";
+import BillingSettingsCard from "@/components/billing-settings-card";
 import ProfileEffectPicker from "@/components/profile-effect-picker";
 import { useEffectsDisabled } from "@/components/use-effects-disabled";
 import UserAvatar from "@/components/user-avatar";
@@ -566,6 +567,8 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {userId && <BillingSettingsCard userId={userId} />}
 
       {/* PROFILE EFFECTS (UNLOCKED BY ACHIEVEMENTS) */}
       <section className="mt-4 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
