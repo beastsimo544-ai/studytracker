@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNotifications } from "@/components/notification-provider";
 import ProfileEffectOverlay from "@/components/profile-effect-overlay";
 import UserAvatar from "@/components/user-avatar";
 import type { Achievement } from "@/lib/achievements";
 import {
-  getProfileEffectById,
+  getProfileEffectVisual,
+  isCustomGifEffect,
   notifyProfileEffectUpdated,
+  processCustomEffectFile,
   PROFILE_EFFECTS,
   resolveActiveProfileEffect,
-  type ProfileEffectId,
+  type ProfileEffectCategory,
   type ProfileEffectPreference,
+  type ProfileEffectValue,
 } from "@/lib/profile-effects";
 import { supabase } from "@/lib/supabase";
 
@@ -26,7 +29,7 @@ type ProfileEffectPickerProps = {
   preference: ProfileEffectPreference;
   onPreferenceChange: (
     nextPref: ProfileEffectPreference,
-    resolvedEffectId: ProfileEffectId | null
+    resolvedEffectId: ProfileEffectValue | null
   ) => void;
 };
 
@@ -42,9 +45,15 @@ export default function ProfileEffectPicker({
   onPreferenceChange,
 }: ProfileEffectPickerProps) {
   const { toast } = useNotifications();
+  const customFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<
+    "all" | ProfileEffectCategory
+  >("all");
   const [previewLockedId, setPreviewLockedId] =
-    useState<ProfileEffectId | null>(null);
+    useState<ProfileEffectValue | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isProcessingCustom, setIsProcessingCustom] = useState(false);
+  const [customError, setCustomError] = useState("");
 
   useEffect(() => {
     if (mode !== "modal" || !open || !onClose) return;
@@ -66,19 +75,29 @@ export default function ProfileEffectPicker({
   const unlockedAchievementIds = achievements
     .filter((a) => a.unlocked)
     .map((a) => a.id);
+  const unlockedSet = new Set(unlockedAchievementIds);
 
   const activeEffect = resolveActiveProfileEffect(
     preference,
     unlockedAchievementIds
   );
   const previewEffect = previewLockedId
-    ? getProfileEffectById(previewLockedId)
+    ? getProfileEffectVisual(previewLockedId)
     : activeEffect;
 
   const unlockedBadges = achievements.filter((a) => a.unlocked);
+  const unlockedEffectsCount = PROFILE_EFFECTS.filter((e) =>
+    unlockedSet.has(e.achievementId)
+  ).length;
+  const isCustomActive = isCustomGifEffect(preference);
+
+  const visibleEffects = PROFILE_EFFECTS.filter((effect) =>
+    categoryFilter === "all" ? true : effect.category === categoryFilter
+  );
 
   const persistPreference = async (nextPref: ProfileEffectPreference) => {
     setPreviewLockedId(null);
+    setCustomError("");
     const nextResolved =
       resolveActiveProfileEffect(nextPref, unlockedAchievementIds)?.id ?? null;
 
@@ -94,7 +113,11 @@ export default function ProfileEffectPicker({
       .eq("user_id", userId);
     setIsSaving(false);
 
-    if (error && !error.message.includes("profile_effect") && error.code !== "42703") {
+    if (
+      error &&
+      !error.message.includes("profile_effect") &&
+      error.code !== "42703"
+    ) {
       toast.error("Could not sync profile effect", error.message);
       return;
     }
@@ -103,11 +126,34 @@ export default function ProfileEffectPicker({
       toast.info("Profile effect turned off");
     } else if (nextPref === "auto") {
       toast.success("Auto effect enabled", "Shows your highest unlocked effect.");
+    } else if (isCustomGifEffect(nextPref)) {
+      toast.success("🎞️ Custom animated background equipped!");
     } else {
-      const chosen = getProfileEffectById(nextPref);
+      const chosen = getProfileEffectVisual(nextPref);
       if (chosen) {
         toast.success(`${chosen.icon} ${chosen.name} equipped!`);
       }
+    }
+  };
+
+  const handleCustomGifUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setCustomError("");
+    setIsProcessingCustom(true);
+    try {
+      const value = await processCustomEffectFile(file);
+      await persistPreference(value);
+    } catch (err) {
+      setCustomError(
+        err instanceof Error ? err.message : "Could not process custom background."
+      );
+    } finally {
+      setIsProcessingCustom(false);
     }
   };
 
@@ -115,7 +161,7 @@ export default function ProfileEffectPicker({
     <div className="space-y-4">
       {/* Live Discord-style Profile Preview Card */}
       <div
-        className={`relative overflow-hidden rounded-2xl border bg-[#09090b] p-4 sm:p-5 transition-colors ${
+        className={`relative overflow-hidden rounded-2xl border bg-[#09090b] p-4 transition-colors sm:p-5 ${
           previewEffect ? previewEffect.borderClass : "border-white/[0.08]"
         }`}
       >
@@ -184,12 +230,12 @@ export default function ProfileEffectPicker({
         </div>
       </div>
 
-      {/* Mode Selector Pills */}
+      {/* Mode Selector + Category Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            disabled={isSaving}
+            disabled={isSaving || isProcessingCustom}
             onClick={() => persistPreference("auto")}
             className={`h-8 rounded-xl border px-3 text-xs font-semibold transition ${
               preference === "auto"
@@ -202,7 +248,7 @@ export default function ProfileEffectPicker({
 
           <button
             type="button"
-            disabled={isSaving}
+            disabled={isSaving || isProcessingCustom}
             onClick={() => persistPreference("none")}
             className={`h-8 rounded-xl border px-3 text-xs font-semibold transition ${
               preference === "none"
@@ -214,14 +260,93 @@ export default function ProfileEffectPicker({
           </button>
         </div>
 
-        <span className="text-[11px] text-white/45 tabular-nums">
-          {unlockedBadges.length} / {PROFILE_EFFECTS.length} unlocked
+        <span className="text-[11px] tabular-nums text-white/45">
+          {unlockedEffectsCount} / {PROFILE_EFFECTS.length} effects unlocked
         </span>
       </div>
 
-      {/* 8 Achievement Profile Effects Grid */}
+      {/* Custom Animated GIF / Image Background Upload */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/[0.05] px-3.5 py-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-white">
+            🎞️ Custom GIF / Background Effect
+          </p>
+          <p className="mt-0.5 text-[11px] text-white/55">
+            Upload an animated GIF (up to 1.8 MB) or image as your card background.
+          </p>
+          {customError && (
+            <p className="mt-1 text-[11px] text-red-400">{customError}</p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={customFileInputRef}
+            type="file"
+            accept="image/gif,image/webp,image/png,image/jpeg"
+            onChange={handleCustomGifUpload}
+            className="hidden"
+          />
+
+          <button
+            type="button"
+            disabled={isSaving || isProcessingCustom}
+            onClick={() => customFileInputRef.current?.click()}
+            className="h-8 rounded-lg border border-fuchsia-400/35 bg-fuchsia-500/15 px-3 text-xs font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/25 disabled:opacity-50"
+          >
+            {isProcessingCustom
+              ? "Processing..."
+              : isCustomActive
+                ? "Change GIF Background"
+                : "Upload GIF Background"}
+          </button>
+
+          {isCustomActive && (
+            <button
+              type="button"
+              disabled={isSaving || isProcessingCustom}
+              onClick={() => persistPreference("auto")}
+              className="h-8 rounded-lg border border-white/15 px-3 text-xs text-white/75 transition hover:border-red-400/35 hover:text-red-300 disabled:opacity-50"
+            >
+              Remove Custom GIF
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Category Filter Pills */}
+      <div className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-white/10 bg-[#09090b] p-1">
+        {(
+          [
+            { key: "all", label: `All (${PROFILE_EFFECTS.length})` },
+            {
+              key: "anime_game",
+              label: `Anime & Games (${PROFILE_EFFECTS.filter((e) => e.category === "anime_game").length})`,
+            },
+            {
+              key: "classic",
+              label: `Classic (${PROFILE_EFFECTS.filter((e) => e.category === "classic").length})`,
+            },
+          ] as const
+        ).map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setCategoryFilter(tab.key)}
+            className={`h-7 rounded-lg px-3 text-xs font-semibold transition ${
+              categoryFilter === tab.key
+                ? "bg-white text-black"
+                : "text-white/60 hover:text-white"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Built-In Achievement Profile Effects Grid */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        {PROFILE_EFFECTS.map((effect) => {
+        {visibleEffects.map((effect) => {
           const achievement = achievementById.get(effect.achievementId);
           const isUnlocked = Boolean(achievement?.unlocked);
           const isEquipped =
@@ -232,7 +357,7 @@ export default function ProfileEffectPicker({
             <button
               key={effect.id}
               type="button"
-              disabled={isSaving}
+              disabled={isSaving || isProcessingCustom}
               onMouseEnter={() => {
                 if (!isUnlocked) setPreviewLockedId(effect.id);
               }}
@@ -283,7 +408,14 @@ export default function ProfileEffectPicker({
               </div>
 
               <div className="relative z-10 mt-2.5">
-                <p className="text-xs font-semibold text-white">{effect.name}</p>
+                {effect.inspiration && (
+                  <span className="inline-block rounded border border-white/15 bg-black/45 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white/75">
+                    {effect.inspiration}
+                  </span>
+                )}
+                <p className="mt-1 text-xs font-semibold text-white">
+                  {effect.name}
+                </p>
                 <p className="mt-0.5 text-[10px] leading-snug text-white/60">
                   {isUnlocked
                     ? effect.description
@@ -327,8 +459,8 @@ export default function ProfileEffectPicker({
               Profile Effects ✨
             </h2>
             <p className="mt-0.5 text-xs text-white/55">
-              Unlock animated Discord-style profile effects by earning
-              study achievements. Tap a locked effect to preview it live.
+              Equip Classic or Anime &amp; Game effects unlocked from
+              achievements, or upload your own animated GIF background.
             </p>
           </div>
 

@@ -1,5 +1,6 @@
 const AVATAR_SIZE_PX = 160;
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_GIF_BYTES = Math.round(1.5 * 1024 * 1024); // 1.5 MB for animated GIFs
 
 export function notifyAvatarUpdated(avatarUrl: string | null) {
   if (typeof window !== "undefined") {
@@ -12,7 +13,29 @@ export function notifyAvatarUpdated(avatarUrl: string | null) {
 export function resizeAvatarFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith("image/")) {
-      reject(new Error("Please select an image file (PNG, JPG, or WebP)."));
+      reject(new Error("Please select an image file (PNG, JPG, WebP, or GIF)."));
+      return;
+    }
+
+    if (file.type === "image/gif") {
+      if (file.size > MAX_GIF_BYTES) {
+        reject(new Error("Animated GIF profile picture must be under 1.5 MB."));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onerror = () => {
+        reject(new Error("Could not read the selected GIF."));
+      };
+      reader.onload = () => {
+        const result = reader.result;
+        if (typeof result === "string" && result.startsWith("data:image/")) {
+          resolve(result);
+        } else {
+          reject(new Error("Invalid or unsupported GIF format."));
+        }
+      };
+      reader.readAsDataURL(file);
       return;
     }
 

@@ -9,7 +9,7 @@ import { useNotifications } from "@/components/notification-provider";
 import UserAvatar from "@/components/user-avatar";
 import {
   loadResolvedActiveEffectId,
-  type ProfileEffectId,
+  type ProfileEffectValue,
 } from "@/lib/profile-effects";
 import { supabase } from "@/lib/supabase";
 
@@ -41,7 +41,7 @@ export default function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isNativeApp, setIsNativeApp] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [effectId, setEffectId] = useState<ProfileEffectId | null>(null);
+  const [effectId, setEffectId] = useState<ProfileEffectValue | null>(null);
   const [displayName, setDisplayName] = useState<string>("?");
   const [bellOpen, setBellOpen] = useState(false);
   const bellContainerRef = useRef<HTMLDivElement | null>(null);
@@ -117,7 +117,7 @@ export default function Navbar() {
 
     const handleEffectUpdated = (event: Event) => {
       const custom = event as CustomEvent<{
-        resolvedEffectId?: ProfileEffectId | null;
+        resolvedEffectId?: ProfileEffectValue | null;
       }>;
       setEffectId(custom.detail?.resolvedEffectId ?? null);
     };

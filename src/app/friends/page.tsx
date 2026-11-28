@@ -18,13 +18,13 @@ import {
   type ChampionQuoteDraft,
 } from "@/lib/champion-quote";
 import {
-  getProfileEffectById,
+  getProfileEffectVisual,
   loadLocalProfileEffectPref,
   parseProfileEffectPreference,
   resolveActiveProfileEffect,
   saveResolvedActiveEffectId,
-  type ProfileEffectId,
   type ProfileEffectPreference,
+  type ProfileEffectValue,
 } from "@/lib/profile-effects";
 import { supabase } from "@/lib/supabase";
 
@@ -94,7 +94,7 @@ type LeaderboardEntry = {
   week_seconds: number;
   current_streak: number;
   unlocked_badges: Achievement[];
-  active_effect: ProfileEffectId | null;
+  active_effect: ProfileEffectValue | null;
   studying_subject: string | null;
   studying_started_at: string | null;
   champion_quote: string | null;
@@ -745,7 +745,7 @@ export default function FriendsPage() {
     const handleEffectUpdated = (event: Event) => {
       const custom = event as CustomEvent<{
         preference?: ProfileEffectPreference;
-        resolvedEffectId?: ProfileEffectId | null;
+        resolvedEffectId?: ProfileEffectValue | null;
       }>;
       const nextPref = custom.detail?.preference;
       const nextEffectId = custom.detail?.resolvedEffectId ?? null;
@@ -1403,7 +1403,7 @@ export default function FriendsPage() {
         entry.studying_subject && entry.studying_started_at
       );
       const isWeeklyChampion = championUserId === entry.user_id;
-      const cardEffect = getProfileEffectById(entry.active_effect);
+      const cardEffect = getProfileEffectVisual(entry.active_effect);
 
       return (
         <div

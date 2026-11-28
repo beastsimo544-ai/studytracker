@@ -517,7 +517,7 @@ export default function SettingsPage() {
             </div>
 
             <p className="text-[11px] text-white/45">
-              PNG, JPG, or WebP · Auto-cropped square
+              PNG, JPG, WebP, or animated GIF (up to 1.5 MB)
             </p>
 
             {avatarMessage && (

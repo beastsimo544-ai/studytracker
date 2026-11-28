@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  getProfileEffectById,
-  type ProfileEffectId,
+  getProfileEffectVisual,
+  type ProfileEffectValue,
 } from "@/lib/profile-effects";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg";
@@ -12,7 +12,7 @@ type UserAvatarProps = {
   name?: string | null;
   size?: AvatarSize;
   className?: string;
-  effectId?: ProfileEffectId | null;
+  effectId?: ProfileEffectValue | null;
 };
 
 const SIZE_CLASSES: Record<AvatarSize, string> = {
@@ -49,7 +49,7 @@ export default function UserAvatar({
   const cleanName = (name || "?").replace(/^@+/, "").trim();
   const initial = (cleanName[0] || "?").toUpperCase();
   const sizeClass = SIZE_CLASSES[size];
-  const effect = getProfileEffectById(effectId);
+  const effect = getProfileEffectVisual(effectId);
 
   const innerBorderClass = effect
     ? "ring-2 ring-[#111113]"

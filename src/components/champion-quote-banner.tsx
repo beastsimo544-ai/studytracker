@@ -6,12 +6,12 @@ import {
   resizeQuoteImageFile,
   type ChampionQuoteDraft,
 } from "@/lib/champion-quote";
-import type { ProfileEffectId } from "@/lib/profile-effects";
+import type { ProfileEffectValue } from "@/lib/profile-effects";
 
 export type ChampionQuoteInfo = {
   username: string;
   avatarUrl: string | null;
-  effectId?: ProfileEffectId | null;
+  effectId?: ProfileEffectValue | null;
   isSelf: boolean;
   scoreLabel: string;
   quote: string | null;

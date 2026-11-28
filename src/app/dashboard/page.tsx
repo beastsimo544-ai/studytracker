@@ -9,7 +9,7 @@ import StudyCardModal from "@/components/study-card-modal";
 import StudyHeatmap from "@/components/study-heatmap";
 import { evaluateAchievements } from "@/lib/achievements";
 import {
-  getProfileEffectForAchievement,
+  getProfileEffectsForAchievement,
   loadLocalProfileEffectPref,
   parseProfileEffectPreference,
   resolveActiveProfileEffect,
@@ -1165,7 +1165,7 @@ export default function Dashboard() {
 
         <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {achievements.map((badge) => {
-            const effectReward = getProfileEffectForAchievement(badge.id);
+            const effectRewards = getProfileEffectsForAchievement(badge.id);
 
             return (
               <div
@@ -1194,10 +1194,12 @@ export default function Dashboard() {
                   {badge.description}
                 </p>
 
-                {effectReward && (
+                {effectRewards.length > 0 && (
                   <p className="mt-2 text-[10px] font-medium text-white/55">
                     ✨ Unlocks{" "}
-                    <span className="text-white/85">{effectReward.name}</span>
+                    <span className="text-white/85">
+                      {effectRewards.map((r) => r.name).join(" · ")}
+                    </span>
                   </p>
                 )}
               </div>

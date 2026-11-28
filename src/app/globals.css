@@ -205,6 +205,137 @@ textarea {
   will-change: transform, opacity;
 }
 
+@keyframes st-glitch-slice {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scaleX(1);
+    opacity: 0.25;
+  }
+  12% {
+    transform: translate3d(-10px, 0, 0) scaleX(1.06);
+    opacity: 0.95;
+  }
+  16% {
+    transform: translate3d(8px, 0, 0) scaleX(0.95);
+    opacity: 0.4;
+  }
+  20% {
+    transform: translate3d(0, 0, 0) scaleX(1);
+    opacity: 0.85;
+  }
+  58% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.2;
+  }
+  62% {
+    transform: translate3d(12px, 0, 0) scaleX(1.08);
+    opacity: 0.9;
+  }
+  67% {
+    transform: translate3d(-6px, 0, 0);
+    opacity: 0.35;
+  }
+}
+
+@keyframes st-domain-expand {
+  0% {
+    transform: translate(-50%, -50%) scale(0.32);
+    opacity: 0.92;
+  }
+  75% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.65);
+    opacity: 0;
+  }
+}
+
+@keyframes st-slash-flash {
+  0%,
+  100% {
+    opacity: 0.1;
+    transform: scale(0.96);
+  }
+  14% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  24% {
+    opacity: 0.18;
+    transform: scale(1);
+  }
+  68% {
+    opacity: 0.14;
+  }
+  74% {
+    opacity: 0.95;
+  }
+  84% {
+    opacity: 0.12;
+  }
+}
+
+@keyframes st-petal-drift {
+  0% {
+    transform: translate3d(-14px, -18px, 0) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.92;
+  }
+  85% {
+    opacity: 0.78;
+  }
+  100% {
+    transform: translate3d(var(--st-drift-x, 70px), 115px, 0)
+      rotate(var(--st-rot, 240deg));
+    opacity: 0;
+  }
+}
+
+@keyframes st-ki-rise {
+  0%,
+  100% {
+    transform: translate3d(0, 12px, 0) scaleY(0.92);
+    opacity: 0.32;
+  }
+  50% {
+    transform: translate3d(0, -10px, 0) scaleY(1.12);
+    opacity: 0.85;
+  }
+}
+
+.st-effect-glitch {
+  animation: st-glitch-slice var(--st-dur, 2.7s) steps(2, end)
+    var(--st-delay, 0s) infinite;
+  will-change: transform, opacity;
+}
+
+.st-effect-domain {
+  animation: st-domain-expand var(--st-dur, 3.8s) cubic-bezier(0.18, 0.72, 0.25, 1)
+    var(--st-delay, 0s) infinite;
+  will-change: transform, opacity;
+}
+
+.st-effect-slash {
+  animation: st-slash-flash var(--st-dur, 2.9s) ease-out var(--st-delay, 0s)
+    infinite;
+  will-change: transform, opacity;
+}
+
+.st-effect-petal {
+  animation: st-petal-drift var(--st-dur, 5.4s) linear var(--st-delay, 0s)
+    infinite;
+  will-change: transform, opacity;
+}
+
+.st-effect-ki {
+  animation: st-ki-rise var(--st-dur, 2.4s) ease-in-out var(--st-delay, 0s)
+    infinite;
+  will-change: transform, opacity;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .st-effect-float-up,
   .st-effect-twinkle,
@@ -212,7 +343,12 @@ textarea {
   .st-effect-shimmer,
   .st-effect-volt,
   .st-effect-ring-spin,
-  .st-effect-breathe {
+  .st-effect-breathe,
+  .st-effect-glitch,
+  .st-effect-domain,
+  .st-effect-slash,
+  .st-effect-petal,
+  .st-effect-ki {
     animation: none !important;
   }
 }
