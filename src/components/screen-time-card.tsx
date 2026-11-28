@@ -46,6 +46,30 @@ const CATEGORY_BADGE: Record<
   },
 };
 
+type ExtensionBridgeState = {
+  ok?: boolean;
+  auth?: { email?: string; userId?: string } | null;
+  lastSyncError?: string;
+  summary?: {
+    apps?: TrackedAppEntry[];
+  };
+};
+
+function sumAppSeconds(apps: TrackedAppEntry[]): number {
+  return apps.reduce((sum, a) => sum + (Number(a.seconds) || 0), 0);
+}
+
+function isRowFromToday(row: ScreenTimeLogRow, todayKey: string): boolean {
+  if (row.log_date === todayKey) return true;
+  if (row.updated_at) {
+    const parsed = new Date(row.updated_at);
+    if (!Number.isNaN(parsed.getTime())) {
+      return getTodayLocalDateKey(parsed) === todayKey;
+    }
+  }
+  return false;
+}
+
 export default function ScreenTimeCard({
   userId,
   todayStudySeconds,
@@ -56,10 +80,14 @@ export default function ScreenTimeCard({
   dailyGoalSeconds: number;
 }) {
   const { toast } = useNotifications();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isAndroid, setIsAndroid] = useState(false);
   const [androidPermissionGranted, setAndroidPermissionGranted] =
     useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [extSyncError, setExtSyncError] = useState("");
+  const [extAccountEmail, setExtAccountEmail] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<
     "all" | "android" | "extension"
@@ -69,12 +97,20 @@ export default function ScreenTimeCard({
   >({});
 
   const [androidApps, setAndroidApps] = useState<TrackedAppEntry[]>([]);
-  const [extensionApps, setExtensionApps] = useState<TrackedAppEntry[]>([]);
-  const [hasExtensionData, setHasExtensionData] = useState(false);
+  const [dbExtApps, setDbExtApps] = useState<TrackedAppEntry[]>([]);
+  const [liveExtApps, setLiveExtApps] = useState<TrackedAppEntry[]>([]);
+  const [hasExtensionBridge, setHasExtensionBridge] = useState(false);
+
+  const pingBrowserExtension = useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.postMessage({ type: "STUDYTRACKER_EXT_PING" }, window.location.origin);
+  }, []);
 
   const loadAllUsage = useCallback(async () => {
     if (!userId) return;
     setIsRefreshing(true);
+    setLoadError("");
+    pingBrowserExtension();
 
     const nativeAndroid = isAndroidNative();
     setIsAndroid(nativeAndroid);
@@ -93,14 +129,23 @@ export default function ScreenTimeCard({
       }
     }
 
+    const [{ data: userData }, { data, error }] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase
+        .from("screen_time_logs")
+        .select(
+          "source, log_date, total_seconds, distracting_seconds, study_seconds, apps, updated_at"
+        )
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false })
+        .limit(8),
+    ]);
+
+    if (userData?.user?.email) {
+      setUserEmail(userData.user.email);
+    }
+
     const todayKey = getTodayLocalDateKey();
-    const { data, error } = await supabase
-      .from("screen_time_logs")
-      .select(
-        "source, log_date, total_seconds, distracting_seconds, study_seconds, apps"
-      )
-      .eq("user_id", userId)
-      .eq("log_date", todayKey);
 
     if (error) {
       if (
@@ -109,23 +154,25 @@ export default function ScreenTimeCard({
         error.message.includes("screen_time_logs")
       ) {
         tableMissing = true;
+      } else {
+        setLoadError(error.message);
       }
     } else if (data) {
-      const rows = data as ScreenTimeLogRow[];
+      const rows = (data as ScreenTimeLogRow[]).filter((r) =>
+        isRowFromToday(r, todayKey)
+      );
       const extRow = rows.find((r) => r.source === "extension");
       const andRow = rows.find((r) => r.source === "android");
 
       if (extRow && Array.isArray(extRow.apps)) {
-        setHasExtensionData(true);
-        setExtensionApps(
+        setDbExtApps(
           extRow.apps.map((a) => ({
             ...a,
             source: "extension",
           }))
         );
       } else {
-        setHasExtensionData(false);
-        setExtensionApps([]);
+        setDbExtApps([]);
       }
 
       if (!nativeAndroid && andRow && Array.isArray(andRow.apps)) {
@@ -139,12 +186,37 @@ export default function ScreenTimeCard({
     setAndroidApps(nextAndroidApps);
     setSetupRequired(tableMissing);
     setIsRefreshing(false);
-  }, [userId]);
+  }, [userId, pingBrowserExtension]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       loadAllUsage();
     }, 0);
+
+    const handleExtensionMessage = (event: MessageEvent) => {
+      if (event.source !== window) return;
+      const msg = event.data as {
+        type?: string;
+        payload?: ExtensionBridgeState;
+      };
+      if (!msg || msg.type !== "STUDYTRACKER_EXT_STATE" || !msg.payload?.ok) {
+        return;
+      }
+
+      setHasExtensionBridge(true);
+      setExtAccountEmail(msg.payload.auth?.email ?? null);
+      setExtSyncError(msg.payload.lastSyncError || "");
+
+      const rawApps = msg.payload.summary?.apps;
+      if (Array.isArray(rawApps)) {
+        setLiveExtApps(
+          rawApps.map((a) => ({
+            ...a,
+            source: "extension" as const,
+          }))
+        );
+      }
+    };
 
     const handleResume = () => {
       loadAllUsage();
@@ -155,19 +227,54 @@ export default function ScreenTimeCard({
       }
     };
 
+    window.addEventListener("message", handleExtensionMessage);
     window.addEventListener("focus", handleResume);
     document.addEventListener("visibilitychange", handleVisibility);
 
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    if (userId) {
+      channel = supabase
+        .channel(`screen-time-${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "screen_time_logs",
+            filter: `user_id=eq.${userId}`,
+          },
+          () => {
+            loadAllUsage();
+          }
+        )
+        .subscribe();
+    }
+
     return () => {
       clearTimeout(timer);
+      window.removeEventListener("message", handleExtensionMessage);
       window.removeEventListener("focus", handleResume);
       document.removeEventListener("visibilitychange", handleVisibility);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
-  }, [loadAllUsage]);
+  }, [userId, loadAllUsage]);
+
+  const effectiveExtensionApps = useMemo(() => {
+    const liveTotal = sumAppSeconds(liveExtApps);
+    const dbTotal = sumAppSeconds(dbExtApps);
+    return liveTotal >= dbTotal && liveExtApps.length > 0
+      ? liveExtApps
+      : dbExtApps;
+  }, [liveExtApps, dbExtApps]);
+
+  const hasExtensionData =
+    hasExtensionBridge || effectiveExtensionApps.length > 0;
 
   const combined = useMemo(() => {
     const merged = recomputeTotalsWithOverrides(
-      [...androidApps, ...extensionApps],
+      [...androidApps, ...effectiveExtensionApps],
       overrides
     );
     const filteredApps =
@@ -189,7 +296,7 @@ export default function ScreenTimeCard({
     };
   }, [
     androidApps,
-    extensionApps,
+    effectiveExtensionApps,
     overrides,
     sourceFilter,
     todayStudySeconds,
@@ -237,12 +344,23 @@ export default function ScreenTimeCard({
     const nextOverrides = saveCategoryOverride(app.id, nextCat);
     setOverrides(nextOverrides);
 
+    if (app.source === "extension" && typeof window !== "undefined") {
+      window.postMessage(
+        {
+          type: "STUDYTRACKER_EXT_SET_CATEGORY",
+          domain: app.id,
+          category: nextCat,
+        },
+        window.location.origin
+      );
+    }
+
     if (!userId) return;
 
     const sourceList =
       app.source === "android"
         ? recomputeTotalsWithOverrides(androidApps, nextOverrides)
-        : recomputeTotalsWithOverrides(extensionApps, nextOverrides);
+        : recomputeTotalsWithOverrides(effectiveExtensionApps, nextOverrides);
 
     await supabase.from("screen_time_logs").upsert(
       {
@@ -258,6 +376,12 @@ export default function ScreenTimeCard({
       { onConflict: "user_id,log_date,source" }
     );
   };
+
+  const hasAccountMismatch = Boolean(
+    extAccountEmail &&
+      userEmail &&
+      extAccountEmail.toLowerCase() !== userEmail.toLowerCase()
+  );
 
   const hasAnyData = combined.apps.length > 0;
 
@@ -383,7 +507,7 @@ export default function ScreenTimeCard({
 
           {hasExtensionData ? (
             <span className="inline-flex h-7 items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 text-[11px] font-medium text-emerald-300">
-              💻 Browser extension synced
+              💻 Browser extension connected
             </span>
           ) : (
             <Link
@@ -400,6 +524,20 @@ export default function ScreenTimeCard({
             Run <code>supabase-screen-time-setup.sql</code> in your{" "}
             <strong>Supabase Dashboard → SQL Editor</strong> to sync screen time
             between the browser extension, Android app, and web dashboard.
+          </div>
+        )}
+
+        {hasAccountMismatch && (
+          <div className="mt-3 rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-xs text-amber-200">
+            Signed into Dashboard as <strong>{userEmail}</strong>, while the
+            extension is signed in as <strong>{extAccountEmail}</strong>. Sign
+            into both with the same email for cloud sync.
+          </div>
+        )}
+
+        {(extSyncError || loadError) && (
+          <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
+            {extSyncError || loadError}
           </div>
         )}
 

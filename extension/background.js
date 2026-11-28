@@ -12,7 +12,7 @@ const CONFIG = self.STUDYTRACKER_CONFIG || {
 
 const ALARM_NAME = "st-heartbeat";
 const MAX_TICK_SECONDS = 300;
-const SYNC_INTERVAL_MS = 2 * 60 * 1000;
+const SYNC_INTERVAL_MS = 30 * 1000;
 const WARNING_COOLDOWN_MS = 45 * 60 * 1000;
 
 const DISTRACTING_KEYWORDS = [
@@ -498,7 +498,7 @@ async function syncTodayToSupabase(force = false) {
           "Content-Type": "application/json",
           apikey: CONFIG.SUPABASE_ANON_KEY,
           Authorization: `Bearer ${auth.accessToken}`,
-          Prefer: "resolution=merge-duplicates,return=minimal",
+          Prefer: "resolution=merge-duplicates,return=representation",
         },
         body: JSON.stringify(payload),
       }
@@ -506,12 +506,28 @@ async function syncTodayToSupabase(force = false) {
 
     if (!upsertRes.ok) {
       const text = await upsertRes.text();
+      let detail = `Sync failed (${upsertRes.status})`;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed?.message) detail = parsed.message;
+      } catch {
+        if (text) detail = text.slice(0, 120);
+      }
       const friendly =
-        text.includes("screen_time_logs") || text.includes("42P01")
+        detail.includes("screen_time_logs") ||
+        text.includes("42P01") ||
+        text.includes("PGRST205")
           ? "Run supabase-screen-time-setup.sql in Supabase SQL Editor first."
-          : `Sync failed (${upsertRes.status})`;
+          : detail;
       await chrome.storage.local.set({ lastSyncError: friendly });
       return { ok: false, error: friendly };
+    }
+
+    const savedRows = await upsertRes.json().catch(() => []);
+    if (!Array.isArray(savedRows) || savedRows.length === 0) {
+      const errMsg = "Sync blocked by database policy — check Supabase setup.";
+      await chrome.storage.local.set({ lastSyncError: errMsg });
+      return { ok: false, error: errMsg };
     }
 
     await chrome.storage.local.set({
@@ -599,12 +615,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   (async () => {
     if (message?.type === "GET_STATE") {
       const domain = await detectCurrentFocusedDomain();
-      const store = await flushElapsedTime(domain);
+      let store = await flushElapsedTime(domain);
+      if (
+        store.auth &&
+        (message.triggerSync || Date.now() - store.lastSyncAt > 15000)
+      ) {
+        await syncTodayToSupabase(true);
+        store = await getStore();
+      }
       const summary = buildTodaySummary(store);
       sendResponse({
         ok: true,
         dashboardUrl: CONFIG.DASHBOARD_URL,
-        auth: store.auth ? { email: store.auth.email, userId: store.auth.userId } : null,
+        auth: store.auth
+          ? { email: store.auth.email, userId: store.auth.userId }
+          : null,
         lastSyncAt: store.lastSyncAt,
         lastSyncError: store.lastSyncError,
         activeDomain: domain,
@@ -634,7 +659,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (!res.ok || !json.access_token) {
         sendResponse({
           ok: false,
-          error: json.error_description || json.msg || "Invalid email or password.",
+          error:
+            json.error_description || json.msg || "Invalid email or password.",
         });
         return;
       }
@@ -646,6 +672,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         email: json.user?.email || email,
       };
       await chrome.storage.local.set({ auth, lastSyncError: "" });
+      const activeDomain = await detectCurrentFocusedDomain();
+      await flushElapsedTime(activeDomain);
       const syncResult = await syncTodayToSupabase(true);
       sendResponse({ ok: true, syncResult });
       return;

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StudyTracker — Screen Time Guard",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Tracks active browser time per site and syncs daily distraction vs. study impact to your StudyTracker Dashboard.",
   "permissions": [
     "tabs",
@@ -16,6 +16,18 @@
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://studytracker-e2vs.vercel.app/*",
+        "http://localhost:3000/*"
+      ],
+      "js": [
+        "content-bridge.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "StudyTracker Screen Time",
