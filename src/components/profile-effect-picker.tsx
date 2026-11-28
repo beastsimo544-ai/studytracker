@@ -231,7 +231,7 @@ export default function ProfileEffectPicker({
 
       {/* Live Discord-style Profile Banner Preview Card */}
       <div
-        className={`relative overflow-hidden rounded-2xl border bg-[#09090b] transition-colors ${
+        className={`relative mx-auto w-full max-w-[360px] overflow-hidden rounded-2xl border bg-[#09090b] transition-colors ${
           previewEffect ? previewEffect.borderClass : "border-white/[0.08]"
         }`}
       >
@@ -241,7 +241,7 @@ export default function ProfileEffectPicker({
         />
 
         {/* Banner Background */}
-        <div className="relative h-28 w-full overflow-hidden">
+        <div className="relative h-32 w-full overflow-hidden">
           {!effectsDisabled && customGifUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img

@@ -619,7 +619,7 @@ function ProfilePageContent() {
       ? Math.min((statsSnapshot.todaySeconds / dailyGoalSeconds) * 100, 100)
       : 0;
 
-  const overviewStats = [
+  const summaryCards = [
     { label: "Today", value: formatDuration(statsSnapshot.todaySeconds) },
     { label: "This week", value: formatDuration(statsSnapshot.weekSeconds) },
     { label: "This month", value: formatDuration(statsSnapshot.monthSeconds) },
@@ -627,93 +627,100 @@ function ProfilePageContent() {
       label: "Daily avg",
       value: formatDuration(statsSnapshot.dailyAverageSeconds),
     },
+    { label: "Current streak", value: `${statsSnapshot.currentStreak}d` },
+    {
+      label: "Longest streak",
+      value: `${statsSnapshot.longestStreak} ${
+        statsSnapshot.longestStreak === 1 ? "day" : "days"
+      }`,
+    },
   ];
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 sm:py-10">
-      {/* DISCORD-STYLE PROFILE HERO CARD */}
-      <section
-        className={`relative overflow-hidden rounded-2xl border bg-[#111113] ${
-          !effectsDisabled && activeEffect
-            ? activeEffect.borderClass
-            : "border-white/[0.08]"
-        }`}
-      >
-        <ProfileEffectOverlay
-          effectId={activeEffect?.id ?? null}
-          intensity="normal"
-        />
+      {/* TOP GRID: COMPACT DISCORD PROFILE CARD (TOP-LEFT) + STATS & GOAL (TOP-RIGHT) */}
+      <section className="grid gap-4 lg:grid-cols-[340px_1fr] lg:items-stretch">
+        {/* LEFT COLUMN: COMPACT DISCORD-STYLE PROFILE CARD */}
+        <div
+          className={`relative flex flex-col overflow-hidden rounded-2xl border bg-[#111113] ${
+            !effectsDisabled && activeEffect
+              ? activeEffect.borderClass
+              : "border-white/[0.08]"
+          }`}
+        >
+          <ProfileEffectOverlay
+            effectId={activeEffect?.id ?? null}
+            intensity="normal"
+          />
 
-        {/* Top Banner Background */}
-        <div className="relative h-44 w-full overflow-hidden sm:h-56">
-          {!effectsDisabled && customGifUrl ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={customGifUrl}
-                alt={`@${displayName} profile banner`}
-                className="h-full w-full object-cover"
+          {/* Compact Crisp Banner Background */}
+          <div className="relative h-36 w-full shrink-0 overflow-hidden">
+            {!effectsDisabled && customGifUrl ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={customGifUrl}
+                  alt={`@${displayName} profile banner`}
+                  className="h-full w-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsGifLightboxOpen(true)}
+                  className="absolute right-3 top-3 z-20 inline-flex h-6 items-center gap-1 rounded-md border border-white/20 bg-black/65 px-2 text-[10px] font-medium text-white/90 backdrop-blur-md transition hover:border-white/40 hover:bg-black/80"
+                >
+                  <span>Expand</span>
+                  <span aria-hidden="true">↗</span>
+                </button>
+              </>
+            ) : (
+              <div
+                aria-hidden="true"
+                className="h-full w-full bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.08),transparent_70%),linear-gradient(180deg,#18181b_0%,#111113_100%)]"
               />
-              <button
-                type="button"
-                onClick={() => setIsGifLightboxOpen(true)}
-                className="absolute right-3.5 top-3.5 z-20 inline-flex h-7 items-center gap-1 rounded-lg border border-white/20 bg-black/65 px-2.5 text-[11px] font-medium text-white/90 backdrop-blur-md transition hover:border-white/40 hover:bg-black/80"
-              >
-                <span>Expand</span>
-                <span aria-hidden="true">↗</span>
-              </button>
-            </>
-          ) : (
+            )}
+
             <div
               aria-hidden="true"
-              className="h-full w-full bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.08),transparent_70%),linear-gradient(180deg,#18181b_0%,#111113_100%)]"
+              className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#111113] via-[#111113]/20 to-transparent"
             />
-          )}
+          </div>
 
-          {/* Smooth Discord-style bottom fade into profile body */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#111113] via-[#111113]/25 to-transparent"
-          />
-        </div>
-
-        {/* Avatar Cutout & Identity Row */}
-        <div className="relative z-10 px-5 pb-5 sm:px-7 sm:pb-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-5">
-              <div className="-mt-12 relative inline-block w-fit rounded-full bg-[#111113] p-1.5 shadow-2xl sm:-mt-14">
+          {/* Identity Cutout & Actions */}
+          <div className="relative z-10 flex flex-1 flex-col justify-between px-5 pb-5">
+            <div>
+              <div className="-mt-10 relative inline-block w-fit rounded-full bg-[#111113] p-1 shadow-2xl">
                 <UserAvatar
                   avatarUrl={profile.avatar_url}
                   name={displayName}
                   size="lg"
                   effectId={activeEffect?.id ?? null}
-                  className="!h-20 !w-20 !text-2xl sm:!h-24 sm:!w-24"
+                  className="!h-[72px] !w-[72px] !text-xl"
                 />
                 <span
                   aria-hidden="true"
                   title={isStudyingNow ? "Currently studying" : "Offline / idle"}
-                  className={`absolute bottom-2 right-2 z-20 h-4 w-4 rounded-full border-[3px] border-[#111113] ${
+                  className={`absolute bottom-1.5 right-1.5 z-20 h-3.5 w-3.5 rounded-full border-[3px] border-[#111113] ${
                     isStudyingNow ? "bg-emerald-400" : "bg-zinc-600"
                   }`}
                 />
               </div>
 
-              <div className="min-w-0 pb-0.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="truncate font-mono text-xl font-bold tracking-tight text-white sm:text-2xl">
+              <div className="mt-2.5 min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <h1 className="truncate font-mono text-lg font-bold tracking-tight text-white">
                     @{displayName}
                   </h1>
 
                   {isSelf ? (
-                    <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/85">
+                    <span className="rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/85">
                       You
                     </span>
                   ) : isFriend ? (
-                    <span className="rounded-full border border-emerald-500/30 bg-emerald-500/12 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
+                    <span className="rounded-full border border-emerald-500/30 bg-emerald-500/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
                       Friend
                     </span>
                   ) : isGroupMate ? (
-                    <span className="rounded-full border border-sky-500/30 bg-sky-500/12 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
+                    <span className="rounded-full border border-sky-500/30 bg-sky-500/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
                       Study Group
                     </span>
                   ) : null}
@@ -721,37 +728,37 @@ function ProfilePageContent() {
                   <ProfileEffectPill effectId={activeEffect?.id ?? null} />
                 </div>
 
-                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-white/55">
-                  {canViewStats && (
-                    <span className="tabular-nums">
-                      {unlockedCount} / {achievements.length} achievements
-                    </span>
-                  )}
+                {canViewStats && (
+                  <p className="mt-1 text-xs text-white/55 tabular-nums">
+                    {unlockedCount} / {achievements.length} achievements
+                  </p>
+                )}
 
-                  {isStudyingNow && profile.studying_started_at && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300 tabular-nums">
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                {isStudyingNow && profile.studying_started_at && (
+                  <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300 tabular-nums">
+                    <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-400" />
+                    <span className="truncate">
                       Studying {profile.studying_subject} ·{" "}
                       {formatLiveElapsed(profile.studying_started_at, nowMs)}
                     </span>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/[0.07] pt-3.5">
               {isSelf ? (
                 <>
                   <button
                     type="button"
                     onClick={() => setIsEffectPickerOpen(true)}
-                    className="h-9 rounded-xl bg-white px-4 text-xs font-semibold text-black transition hover:bg-white/90"
+                    className="h-8 flex-1 rounded-xl bg-white px-3 text-xs font-semibold text-black transition hover:bg-white/90"
                   >
                     Customize Profile
                   </button>
                   <Link
                     href="/settings"
-                    className="inline-flex h-9 items-center rounded-xl border border-white/15 bg-[#09090b]/80 px-3.5 text-xs font-medium text-white/85 transition hover:border-white/30 hover:text-white"
+                    className="inline-flex h-8 items-center rounded-xl border border-white/15 bg-[#09090b]/80 px-3 text-xs font-medium text-white/85 transition hover:border-white/30 hover:text-white"
                   >
                     Settings
                   </Link>
@@ -760,7 +767,7 @@ function ProfilePageContent() {
                 <>
                   <Link
                     href="/friends"
-                    className="inline-flex h-9 items-center rounded-xl border border-white/15 bg-[#09090b]/80 px-3.5 text-xs font-medium text-white/85 transition hover:border-white/30 hover:text-white"
+                    className="inline-flex h-8 items-center rounded-xl border border-white/15 bg-[#09090b]/80 px-3 text-xs font-medium text-white/85 transition hover:border-white/30 hover:text-white"
                   >
                     Back to Friends
                   </Link>
@@ -770,7 +777,7 @@ function ProfilePageContent() {
                       type="button"
                       disabled={isMutatingRelation}
                       onClick={handleSendFriendRequest}
-                      className="h-9 rounded-xl bg-white px-4 text-xs font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+                      className="h-8 flex-1 rounded-xl bg-white px-3 text-xs font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
                     >
                       Add Friend
                     </button>
@@ -781,14 +788,14 @@ function ProfilePageContent() {
                       type="button"
                       disabled={isMutatingRelation}
                       onClick={handleAcceptFriendRequest}
-                      className="h-9 rounded-xl border border-emerald-500/35 bg-emerald-500/15 px-4 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/25 disabled:opacity-50"
+                      className="h-8 flex-1 rounded-xl border border-emerald-500/35 bg-emerald-500/15 px-3 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/25 disabled:opacity-50"
                     >
                       Accept Request
                     </button>
                   )}
 
                   {pendingDirection === "outgoing" && (
-                    <span className="inline-flex h-9 items-center rounded-xl border border-white/12 bg-white/[0.04] px-3.5 text-xs font-medium text-white/55">
+                    <span className="inline-flex h-8 flex-1 items-center justify-center rounded-xl border border-white/12 bg-white/[0.04] px-3 text-xs font-medium text-white/55">
                       Request Sent
                     </span>
                   )}
@@ -797,51 +804,27 @@ function ProfilePageContent() {
             </div>
           </div>
         </div>
-      </section>
 
-      {canViewStats ? (
-        <>
-          {/* 4-COLUMN OVERVIEW METRICS */}
-          <section className="mt-5 grid grid-cols-2 gap-3 sm:mt-6 sm:gap-4 lg:grid-cols-4">
-            {overviewStats.map((stat) => (
-              <article
-                key={stat.label}
-                className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5"
-              >
-                <p className="text-xs font-medium text-white/50">
-                  {stat.label}
-                </p>
-                <p className="mt-2 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">
-                  {stat.value}
-                </p>
-              </article>
-            ))}
-          </section>
-
-          {/* STREAKS & DAILY STUDY GOAL */}
-          <section className="mt-4 grid gap-4 sm:mt-5 lg:grid-cols-2">
-            <div className="grid grid-cols-2 gap-3 sm:gap-4">
-              <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
-                <p className="text-xs font-medium text-white/50">
-                  Current streak
-                </p>
-                <p className="mt-2 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">
-                  {statsSnapshot.currentStreak}d
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
-                <p className="text-xs font-medium text-white/50">
-                  Longest streak
-                </p>
-                <p className="mt-2 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">
-                  {statsSnapshot.longestStreak}{" "}
-                  {statsSnapshot.longestStreak === 1 ? "day" : "days"}
-                </p>
-              </div>
+        {/* RIGHT COLUMN: STUDY OVERVIEW & DAILY GOAL OR PRIVATE LOCKED STATE */}
+        {canViewStats ? (
+          <div className="flex flex-col gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-3.5">
+              {summaryCards.map((stat) => (
+                <article
+                  key={stat.label}
+                  className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5"
+                >
+                  <p className="text-xs font-medium text-white/50">
+                    {stat.label}
+                  </p>
+                  <p className="mt-2 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">
+                    {stat.value}
+                  </p>
+                </article>
+              ))}
             </div>
 
-            <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
+            <div className="flex flex-1 flex-col justify-center rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-medium text-white/50">
@@ -871,7 +854,23 @@ function ProfilePageContent() {
                 {Math.round(dailyGoalProgress)}% complete today
               </p>
             </div>
-          </section>
+          </div>
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-white/[0.08] bg-[#111113] p-8 text-center">
+            <h2 className="text-base font-semibold text-white">
+              Private Study Analytics
+            </h2>
+            <p className="mt-1.5 max-w-md text-xs text-white/55 sm:text-sm">
+              Add <span className="font-mono text-white/85">@{displayName}</span>{" "}
+              as a friend (or join the same study group) to view their study
+              totals, weekly chart, calendar, and consistency heatmap.
+            </p>
+          </div>
+        )}
+      </section>
+
+      {canViewStats && (
+        <>
 
           {/* WEEKLY CHART & STUDY CALENDAR */}
           <section className="mt-5 grid gap-5 sm:mt-6 lg:grid-cols-2">
@@ -1015,17 +1014,6 @@ function ProfilePageContent() {
             dailyGoalMinutes={dailyGoalMinutes}
           />
         </>
-      ) : (
-        <section className="mt-5 rounded-2xl border border-white/[0.08] bg-[#111113] p-8 text-center sm:mt-6">
-          <h2 className="text-base font-semibold text-white">
-            Private Study Analytics
-          </h2>
-          <p className="mt-1.5 text-xs text-white/55 sm:text-sm">
-            Add <span className="font-mono text-white/85">@{displayName}</span>{" "}
-            as a friend (or join the same study group) to view their study
-            totals, weekly chart, calendar, and consistency heatmap.
-          </p>
-        </section>
       )}
 
       {/* BANNER GIF LIGHTBOX MODAL */}
