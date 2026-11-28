@@ -20,6 +20,9 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -137,6 +140,31 @@ public class ScreenTimePlugin extends Plugin {
         call.resolve();
     }
 
+    private void addClippedDuration(
+        Map<String, Long> durationMsByPackage,
+        String pkg,
+        long segStart,
+        long segEnd,
+        List<long[]> windows
+    ) {
+        if (segEnd <= segStart) return;
+        if (windows == null) {
+            durationMsByPackage.put(pkg, durationMsByPackage.getOrDefault(pkg, 0L) + (segEnd - segStart));
+            return;
+        }
+        long overlapTotal = 0L;
+        for (long[] w : windows) {
+            long start = Math.max(segStart, w[0]);
+            long end = Math.min(segEnd, w[1]);
+            if (end > start) {
+                overlapTotal += (end - start);
+            }
+        }
+        if (overlapTotal > 0L) {
+            durationMsByPackage.put(pkg, durationMsByPackage.getOrDefault(pkg, 0L) + overlapTotal);
+        }
+    }
+
     @PluginMethod
     public void getTodayUsage(PluginCall call) {
         boolean granted = hasUsageAccessPermission();
@@ -166,10 +194,61 @@ public class ScreenTimePlugin extends Plugin {
 
         String dateKey = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(nowMs));
 
+        JSArray windowsArg = call.getArray("windows");
+        boolean hasExplicitWindows = windowsArg != null;
+        List<long[]> mergedWindows = null;
+        long queryStart = startOfDayMs;
+        long queryEnd = nowMs;
+
+        if (hasExplicitWindows) {
+            List<long[]> parsedWindows = new ArrayList<>();
+            for (int i = 0; i < windowsArg.length(); i++) {
+                try {
+                    JSONObject wObj = windowsArg.getJSONObject(i);
+                    long rawStart = wObj.optLong("startMs", 0L);
+                    long rawEnd = wObj.optLong("endMs", 0L);
+                    long clampedStart = Math.max(startOfDayMs, rawStart);
+                    long clampedEnd = Math.min(nowMs, rawEnd);
+                    if (clampedEnd > clampedStart) {
+                        parsedWindows.add(new long[] { clampedStart, clampedEnd });
+                    }
+                } catch (JSONException ignored) {
+                    // Skip invalid window entry
+                }
+            }
+
+            if (parsedWindows.isEmpty()) {
+                JSObject ret = new JSObject();
+                ret.put("granted", true);
+                ret.put("dateKey", dateKey);
+                ret.put("totalSeconds", 0);
+                ret.put("apps", new JSArray());
+                call.resolve(ret);
+                return;
+            }
+
+            Collections.sort(parsedWindows, (a, b) -> Long.compare(a[0], b[0]));
+            mergedWindows = new ArrayList<>();
+            long[] currentWindow = new long[] { parsedWindows.get(0)[0], parsedWindows.get(0)[1] };
+            for (int i = 1; i < parsedWindows.size(); i++) {
+                long[] next = parsedWindows.get(i);
+                if (next[0] <= currentWindow[1]) {
+                    currentWindow[1] = Math.max(currentWindow[1], next[1]);
+                } else {
+                    mergedWindows.add(currentWindow);
+                    currentWindow = new long[] { next[0], next[1] };
+                }
+            }
+            mergedWindows.add(currentWindow);
+
+            queryStart = Math.max(startOfDayMs, mergedWindows.get(0)[0] - 30L * 60L * 1000L);
+            queryEnd = mergedWindows.get(mergedWindows.size() - 1)[1];
+        }
+
         Map<String, Long> durationMsByPackage = new HashMap<>();
         Map<String, Long> activeStartByPackage = new HashMap<>();
 
-        UsageEvents events = usm.queryEvents(startOfDayMs, nowMs);
+        UsageEvents events = usm.queryEvents(queryStart, queryEnd);
         if (events != null) {
             UsageEvents.Event event = new UsageEvents.Event();
             while (events.hasNextEvent()) {
@@ -191,30 +270,34 @@ public class ScreenTimePlugin extends Plugin {
                 } else if (isPause) {
                     Long startedAt = activeStartByPackage.remove(pkg);
                     if (startedAt != null && event.getTimeStamp() > startedAt) {
-                        long delta = event.getTimeStamp() - startedAt;
-                        durationMsByPackage.put(
+                        addClippedDuration(
+                            durationMsByPackage,
                             pkg,
-                            durationMsByPackage.getOrDefault(pkg, 0L) + delta
+                            startedAt,
+                            event.getTimeStamp(),
+                            mergedWindows
                         );
                     }
                 }
             }
 
-            // Close any session currently in the foreground
+            // Close any session currently in the foreground up to queryEnd
             for (Map.Entry<String, Long> openEntry : activeStartByPackage.entrySet()) {
                 long startedAt = openEntry.getValue();
-                if (nowMs > startedAt) {
-                    String pkg = openEntry.getKey();
-                    durationMsByPackage.put(
-                        pkg,
-                        durationMsByPackage.getOrDefault(pkg, 0L) + (nowMs - startedAt)
+                if (queryEnd > startedAt) {
+                    addClippedDuration(
+                        durationMsByPackage,
+                        openEntry.getKey(),
+                        startedAt,
+                        queryEnd,
+                        mergedWindows
                     );
                 }
             }
         }
 
-        // Fallback for OEMs where queryEvents is sparse
-        if (durationMsByPackage.isEmpty()) {
+        // Fallback only for unscoped whole-day queries where queryEvents is sparse
+        if (!hasExplicitWindows && durationMsByPackage.isEmpty()) {
             Map<String, UsageStats> stats = usm.queryAndAggregateUsageStats(startOfDayMs, nowMs);
             if (stats != null) {
                 for (UsageStats stat : stats.values()) {
@@ -232,10 +315,11 @@ public class ScreenTimePlugin extends Plugin {
         PackageManager pm = context.getPackageManager();
         List<Map.Entry<String, Long>> entries = new ArrayList<>();
         long totalSeconds = 0L;
+        long minSeconds = hasExplicitWindows ? 3L : 10L;
 
         for (Map.Entry<String, Long> entry : durationMsByPackage.entrySet()) {
             long secs = entry.getValue() / 1000L;
-            if (secs >= 10L) {
+            if (secs >= minSeconds) {
                 entries.add(entry);
                 totalSeconds += secs;
             }

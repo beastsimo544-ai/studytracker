@@ -34,7 +34,21 @@ function renderState(res) {
   if (!res || !res.ok) return;
   if (res.dashboardUrl) dashboardUrl = res.dashboardUrl;
 
-  const { summary, auth, lastSyncAt, lastSyncError } = res;
+  const { summary, auth, lastSyncAt, lastSyncError, timerStatus } = res;
+  const trackingBanner = document.getElementById("tracking-banner");
+  const trackingText = document.getElementById("tracking-text");
+  if (trackingBanner && trackingText) {
+    if (timerStatus && timerStatus.active) {
+      trackingBanner.className = "tracking-banner tracking-active";
+      trackingText.textContent = timerStatus.subject
+        ? `Tracking live · Studying ${timerStatus.subject}`
+        : "Tracking live · Focus timer running";
+    } else {
+      trackingBanner.className = "tracking-banner tracking-standby";
+      trackingText.textContent = "Standby · Start Focus Timer to track";
+    }
+  }
+
   const badge = document.getElementById("risk-badge");
   const headline = document.getElementById("risk-headline");
   const scoreEl = document.getElementById("risk-score");
@@ -66,7 +80,10 @@ function renderState(res) {
   if (!summary.apps || summary.apps.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty-note";
-    empty.textContent = "Browse normally — active sites appear here.";
+    empty.textContent =
+      timerStatus && timerStatus.active
+        ? "Timer running — visited sites will appear here."
+        : "Start your Focus Timer to track distractions during study sessions.";
     listEl.appendChild(empty);
   } else {
     for (const app of summary.apps.slice(0, 8)) {

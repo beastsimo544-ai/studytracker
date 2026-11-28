@@ -27,7 +27,7 @@ for (const target of stashTargets) {
 
 let exitCode = 1;
 try {
-  const result = spawnSync(process.execPath, [nextBin, "build"], {
+  const result = spawnSync(process.execPath, [nextBin, "build", "--webpack"], {
     stdio: "inherit",
     env: {
       ...process.env,

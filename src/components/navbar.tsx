@@ -162,6 +162,7 @@ export default function Navbar() {
         { href: "/subject", label: "Subjects" },
         { href: "/history", label: "History" },
         { href: "/friends", label: "Friends" },
+        { href: "/profile", label: "Profile" },
         ...(!isNativeApp ? [{ href: "/download", label: "App" }] : []),
       ]
     : [

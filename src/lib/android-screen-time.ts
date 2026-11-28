@@ -6,6 +6,10 @@ import {
   type TrackedAppEntry,
 } from "@/lib/screen-time";
 import { supabase } from "@/lib/supabase";
+import {
+  getTodayTimerWindows,
+  type ClosedTimerWindow,
+} from "@/lib/timer-windows";
 
 type NativeAppUsage = {
   id: string;
@@ -23,7 +27,9 @@ type NativeTodayUsageResult = {
 type ScreenTimePluginInterface = {
   checkPermission(): Promise<{ granted: boolean }>;
   openUsageAccessSettings(): Promise<void>;
-  getTodayUsage(): Promise<NativeTodayUsageResult>;
+  getTodayUsage(options?: {
+    windows?: ClosedTimerWindow[];
+  }): Promise<NativeTodayUsageResult>;
 };
 
 const ScreenTime = registerPlugin<ScreenTimePluginInterface>("ScreenTime");
@@ -68,7 +74,8 @@ export async function getAndroidTodayUsage(): Promise<{
   }
 
   try {
-    const res = await ScreenTime.getTodayUsage();
+    const windows = getTodayTimerWindows();
+    const res = await ScreenTime.getTodayUsage({ windows });
     const overrides = loadCategoryOverrides();
     const rawApps = Array.isArray(res?.apps) ? res.apps : [];
 
@@ -125,6 +132,10 @@ export async function syncAndroidUsageToSupabase(userId: string): Promise<{
 }> {
   const usage = await getAndroidTodayUsage();
   if (!usage.granted) {
+    return { ...usage, setupRequired: false };
+  }
+
+  if (usage.totalSeconds === 0 && getTodayTimerWindows().length === 0) {
     return { ...usage, setupRequired: false };
   }
 

@@ -21,6 +21,7 @@ import {
   type TrackedAppEntry,
 } from "@/lib/screen-time";
 import { supabase } from "@/lib/supabase";
+import { readActiveTimerStatusFromStorage } from "@/lib/timer-windows";
 
 const CATEGORY_CYCLE: Record<ScreenTimeCategory, ScreenTimeCategory> = {
   distracting: "study",
@@ -50,6 +51,11 @@ type ExtensionBridgeState = {
   ok?: boolean;
   auth?: { email?: string; userId?: string } | null;
   lastSyncError?: string;
+  timerStatus?: {
+    active?: boolean;
+    subject?: string | null;
+    source?: string;
+  };
   summary?: {
     apps?: TrackedAppEntry[];
   };
@@ -100,6 +106,18 @@ export default function ScreenTimeCard({
   const [dbExtApps, setDbExtApps] = useState<TrackedAppEntry[]>([]);
   const [liveExtApps, setLiveExtApps] = useState<TrackedAppEntry[]>([]);
   const [hasExtensionBridge, setHasExtensionBridge] = useState(false);
+  const [localTimerActive, setLocalTimerActive] = useState(false);
+  const [localTimerSubject, setLocalTimerSubject] = useState<string | null>(
+    null
+  );
+  const [extTimerActive, setExtTimerActive] = useState(false);
+  const [extTimerSubject, setExtTimerSubject] = useState<string | null>(null);
+
+  const syncLocalTimerStatus = useCallback(() => {
+    const status = readActiveTimerStatusFromStorage();
+    setLocalTimerActive(status.active);
+    setLocalTimerSubject(status.subject);
+  }, []);
 
   const pingBrowserExtension = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -110,6 +128,7 @@ export default function ScreenTimeCard({
     if (!userId) return;
     setIsRefreshing(true);
     setLoadError("");
+    syncLocalTimerStatus();
     pingBrowserExtension();
 
     const nativeAndroid = isAndroidNative();
@@ -186,7 +205,7 @@ export default function ScreenTimeCard({
     setAndroidApps(nextAndroidApps);
     setSetupRequired(tableMissing);
     setIsRefreshing(false);
-  }, [userId, pingBrowserExtension]);
+  }, [userId, pingBrowserExtension, syncLocalTimerStatus]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -206,6 +225,8 @@ export default function ScreenTimeCard({
       setHasExtensionBridge(true);
       setExtAccountEmail(msg.payload.auth?.email ?? null);
       setExtSyncError(msg.payload.lastSyncError || "");
+      setExtTimerActive(Boolean(msg.payload.timerStatus?.active));
+      setExtTimerSubject(msg.payload.timerStatus?.subject ?? null);
 
       const rawApps = msg.payload.summary?.apps;
       if (Array.isArray(rawApps)) {
@@ -226,9 +247,16 @@ export default function ScreenTimeCard({
         loadAllUsage();
       }
     };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "studyTimer") {
+        syncLocalTimerStatus();
+        pingBrowserExtension();
+      }
+    };
 
     window.addEventListener("message", handleExtensionMessage);
     window.addEventListener("focus", handleResume);
+    window.addEventListener("storage", handleStorage);
     document.addEventListener("visibilitychange", handleVisibility);
 
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -254,12 +282,13 @@ export default function ScreenTimeCard({
       clearTimeout(timer);
       window.removeEventListener("message", handleExtensionMessage);
       window.removeEventListener("focus", handleResume);
+      window.removeEventListener("storage", handleStorage);
       document.removeEventListener("visibilitychange", handleVisibility);
       if (channel) {
         supabase.removeChannel(channel);
       }
     };
-  }, [userId, loadAllUsage]);
+  }, [userId, loadAllUsage, syncLocalTimerStatus, pingBrowserExtension]);
 
   const effectiveExtensionApps = useMemo(() => {
     const liveTotal = sumAppSeconds(liveExtApps);
@@ -383,6 +412,12 @@ export default function ScreenTimeCard({
       extAccountEmail.toLowerCase() !== userEmail.toLowerCase()
   );
 
+  const isTrackingLive = localTimerActive || extTimerActive;
+  const activeSubject = localTimerSubject || extTimerSubject;
+  const showDangerStartTimer =
+    combined.risk.level === "warning" ||
+    combined.risk.level === "danger" ||
+    combined.risk.level === "critical";
   const hasAnyData = combined.apps.length > 0;
 
   return (
@@ -403,14 +438,14 @@ export default function ScreenTimeCard({
               </span>
             </div>
             <p className="mt-1 text-xs text-white/60">
-              {combined.risk.headline}
+              {combined.totalSeconds === 0
+                ? "Tracks distractions only while your Focus Timer is running."
+                : combined.risk.headline}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {(combined.risk.level === "warning" ||
-              combined.risk.level === "danger" ||
-              combined.risk.level === "critical") && (
+            {showDangerStartTimer && (
               <Link
                 href="/timer"
                 className="inline-flex h-8 items-center rounded-xl bg-white px-3 text-xs font-semibold text-black transition hover:bg-white/90"
@@ -473,7 +508,7 @@ export default function ScreenTimeCard({
           </div>
 
           <div className="rounded-xl border border-white/[0.08] bg-[#09090b] p-3">
-            <p className="text-[11px] text-white/50">Tracked Screen</p>
+            <p className="text-[11px] text-white/50">Study Screen</p>
             <p className="mt-1 font-mono text-base font-bold tabular-nums sm:text-lg">
               {formatScreenDuration(combined.totalSeconds)}
             </p>
@@ -487,8 +522,28 @@ export default function ScreenTimeCard({
           </div>
         </div>
 
-        {/* Source Setup Prompts */}
+        {/* Source Setup & Timer Status Prompts */}
         <div className="mt-3.5 flex flex-wrap items-center gap-2">
+          {isTrackingLive ? (
+            <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/15 px-2.5 text-[11px] font-medium text-emerald-300">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+              Tracking live · {activeSubject || "Focus Timer"}
+            </span>
+          ) : (
+            <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-white/12 bg-[#09090b] px-2.5 text-[11px] font-medium text-white/65">
+              ⏸️ Standby · tracks only while timer runs
+            </span>
+          )}
+
+          {!isTrackingLive && !showDangerStartTimer && (
+            <Link
+              href="/timer"
+              className="inline-flex h-7 items-center rounded-full border border-white/15 bg-white/[0.04] px-2.5 text-[11px] font-medium text-white/80 transition hover:border-white/30 hover:text-white"
+            >
+              Start Timer →
+            </Link>
+          )}
+
           {isAndroid && !androidPermissionGranted && (
             <button
               type="button"
@@ -546,7 +601,7 @@ export default function ScreenTimeCard({
           <div className="mt-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-semibold text-white/80">
-                Top Apps &amp; Sites Today{" "}
+                Top Apps &amp; Sites During Study{" "}
                 <span className="font-normal text-white/45">
                   · tap pill to reclassify
                 </span>

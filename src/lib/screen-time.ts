@@ -255,30 +255,36 @@ export function evaluateScreenTimeRisk({
   studySecondsToday: number;
   dailyGoalSeconds: number;
 }): ScreenTimeRiskSummary {
-  const distractMins = Math.max(0, distractingSeconds) / 60;
-  const totalNonStudyMins = Math.max(
-    0,
-    (Math.max(totalScreenSeconds, distractingSeconds) - 0) / 60
-  );
-  const studyMins = Math.max(0, studySecondsToday) / 60;
-  const goalMins = Math.max(30, dailyGoalSeconds / 60);
-
-  // Base risk from distracting screen time (0-78) + excess total screen time (0-22)
-  let rawScore = (distractMins / 135) * 78 + Math.max(0, (totalNonStudyMins - 150) / 240) * 22;
-
-  // Heighten urgency when distracting time noticeably outpaces today's study time
-  if (distractMins >= 25 && studyMins < 20) {
-    rawScore += 12;
-  } else if (distractMins > studyMins * 1.5 && distractMins >= 30) {
-    rawScore += Math.min(18, (distractMins - studyMins) / 6);
+  if (distractingSeconds <= 0) {
+    return {
+      level: "safe",
+      score: 0,
+      label: "Safe",
+      badgeClass:
+        "border-emerald-500/35 bg-emerald-500/15 text-emerald-300",
+      barColor: "#10b981",
+      borderClass: "border-emerald-500/25",
+      headline: "Locked in — zero distractions during study time.",
+      advice: "Keep your focus timer running and distracting tabs/apps closed.",
+    };
   }
 
-  // Soften impact if daily study goal is already met or well underway
+  const distractMins = Math.max(0, distractingSeconds) / 60;
+  const totalMins = Math.max(totalScreenSeconds, distractingSeconds) / 60;
+  const studyMins = Math.max(0, studySecondsToday) / 60;
+  const effectiveStudyMins = Math.max(studyMins, totalMins);
+  const distractRatio =
+    effectiveStudyMins > 0 ? Math.min(1, distractMins / effectiveStudyMins) : 0;
+
+  let rawScore = (distractMins / 45) * 65;
+  if (distractMins >= 2) {
+    rawScore += Math.min(35, distractRatio * 55);
+  }
+
+  const goalMins = Math.max(30, dailyGoalSeconds / 60);
   const goalProgress = studyMins / goalMins;
-  if (goalProgress >= 1) {
-    rawScore -= 18;
-  } else if (goalProgress >= 0.5) {
-    rawScore -= 8;
+  if (goalProgress >= 1 && distractRatio < 0.25) {
+    rawScore -= 10;
   }
 
   const score = Math.max(0, Math.min(100, Math.round(rawScore)));
@@ -292,11 +298,11 @@ export function evaluateScreenTimeRisk({
         "border-emerald-500/35 bg-emerald-500/15 text-emerald-300",
       barColor: "#10b981",
       borderClass: "border-emerald-500/25",
-      headline: "Screen time is well under control.",
+      headline: "Locked in — distractions stayed minimal during study time.",
       advice:
-        distractMins < 10
-          ? "Zero major distractions detected today — stay locked in."
-          : "Distractions are low relative to your focus sessions.",
+        distractMins < 3
+          ? "Nearly zero off-task browsing while your timer was running."
+          : "Minor checks stayed low compared to your study sessions.",
     };
   }
 
@@ -308,9 +314,9 @@ export function evaluateScreenTimeRisk({
       badgeClass: "border-yellow-500/35 bg-yellow-500/15 text-yellow-300",
       barColor: "#eab308",
       borderClass: "border-yellow-500/30",
-      headline: "Distractions are starting to build up.",
+      headline: "Distractions are creeping into your study sessions.",
       advice:
-        "Wrap up casual browsing and start a quick Pomodoro before momentum slips.",
+        "Save casual browsing for breaks so your active timer reflects real focus.",
     };
   }
 
@@ -322,9 +328,9 @@ export function evaluateScreenTimeRisk({
       badgeClass: "border-orange-500/40 bg-orange-500/15 text-orange-300",
       barColor: "#f97316",
       borderClass: "border-orange-500/35",
-      headline: "Screen time is catching up to your study time.",
+      headline: "Noticeable study timer time is going to distractions.",
       advice:
-        "Close distracting apps/tabs now and knock out 25 minutes on your Timer.",
+        "Close distracting tabs/apps now before finishing your current focus block.",
     };
   }
 
@@ -336,9 +342,9 @@ export function evaluateScreenTimeRisk({
       badgeClass: "border-red-500/45 bg-red-500/15 text-red-300",
       barColor: "#ef4444",
       borderClass: "border-red-500/45",
-      headline: "Screen time is hurting today's study goal.",
+      headline: "Too much study timer time is being lost to distractions.",
       advice:
-        "High distraction load detected. Switch into Minimal Focus Mode to recover today's streak.",
+        "Switch into Minimal Focus Mode or pause your timer until you are ready to lock in.",
     };
   }
 
@@ -350,8 +356,8 @@ export function evaluateScreenTimeRisk({
       "border-rose-500/60 bg-rose-500/20 text-rose-200 animate-pulse",
     barColor: "#e11d48",
     borderClass: "border-rose-500/55",
-    headline: "Critical distraction overload vs. your studies!",
+    headline: "Critical distraction overload during study sessions!",
     advice:
-      "Put your phone down / close distracting tabs immediately and lock in one 25m focus session.",
+      "Put your phone down / close distracting tabs immediately, or reset and restart a clean focus block.",
   };
 }

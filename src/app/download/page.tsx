@@ -222,9 +222,10 @@ export default function DownloadPage() {
               StudyTracker Screen Time Guard
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-white/60 sm:text-sm">
-              Automatically tracks active website screen time, alerts you when
-              distractions cut into study sessions, and syncs directly to your
-              Dashboard Green→Red risk meter.
+              Automatically tracks active websites only while your StudyTracker
+              Focus Timer is running, alerts you when distractions cut into
+              study time, and syncs directly to your Dashboard Green→Red risk
+              meter.
             </p>
           </div>
 

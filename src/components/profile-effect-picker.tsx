@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import CustomGifBanner from "@/components/custom-gif-banner";
 import { useNotifications } from "@/components/notification-provider";
 import ProfileEffectOverlay from "@/components/profile-effect-overlay";
 import { useEffectsDisabled } from "@/components/use-effects-disabled";
@@ -159,7 +158,7 @@ export default function ProfileEffectPicker({
     }
 
     if (toastLabel === "gif_saved") {
-      toast.success("🎞️ Left profile GIF updated!");
+      toast.success("Profile banner GIF updated!");
       return;
     }
     if (toastLabel === "gif_removed") {
@@ -230,7 +229,7 @@ export default function ProfileEffectPicker({
         </button>
       </div>
 
-      {/* Live Discord-style Profile Preview Card */}
+      {/* Live Discord-style Profile Banner Preview Card */}
       <div
         className={`relative overflow-hidden rounded-2xl border bg-[#09090b] transition-colors ${
           previewEffect ? previewEffect.borderClass : "border-white/[0.08]"
@@ -241,56 +240,66 @@ export default function ProfileEffectPicker({
           intensity="strong"
         />
 
-        <div className="relative z-10 flex flex-col gap-3.5 p-4 sm:flex-row sm:items-center sm:p-5">
-          {!effectsDisabled && customGifUrl && (
-            <CustomGifBanner
-              gifUrl={customGifUrl}
-              username={username}
-              sizeClass="h-28 w-full sm:h-24 sm:w-28"
+        {/* Banner Background */}
+        <div className="relative h-28 w-full overflow-hidden">
+          {!effectsDisabled && customGifUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={customGifUrl}
+              alt={`@${username || "student"} banner preview`}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              className="h-full w-full bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.08),transparent_70%),linear-gradient(180deg,#18181b_0%,#09090b_100%)]"
             />
           )}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#09090b] via-[#09090b]/30 to-transparent"
+          />
+        </div>
 
-          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3.5">
-              <UserAvatar
-                avatarUrl={avatarUrl}
-                name={username || "you"}
-                size="lg"
-                effectId={previewEffect?.id ?? null}
-              />
+        {/* Overlapping Avatar + Identity */}
+        <div className="relative z-10 px-4 pb-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="flex min-w-0 items-end gap-3.5">
+              <div className="-mt-9 rounded-full bg-[#09090b] p-1 shadow-xl">
+                <UserAvatar
+                  avatarUrl={avatarUrl}
+                  name={username || "you"}
+                  size="lg"
+                  effectId={previewEffect?.id ?? null}
+                />
+              </div>
 
-              <div className="min-w-0">
+              <div className="min-w-0 pb-0.5">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="truncate font-mono text-sm font-bold text-white sm:text-base">
                     @{username || "student"}
                   </span>
-                  {unlockedBadges.length > 0 && (
-                    <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[11px]">
-                      {unlockedBadges.map((b) => (
-                        <span key={b.id} title={b.title}>
-                          {b.icon}
-                        </span>
-                      ))}
-                    </span>
-                  )}
+                  <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/60 tabular-nums">
+                    {unlockedBadges.length} badges
+                  </span>
                 </div>
 
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   {effectsDisabled ? (
                     <span className="inline-flex items-center rounded-full border border-white/15 bg-white/[0.05] px-2.5 py-0.5 text-[11px] text-white/65">
                       Distraction-free mode ON · all effects hidden
                     </span>
                   ) : previewLockedId && previewEffect ? (
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${previewEffect.badgeClass}`}
+                      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${previewEffect.badgeClass}`}
                     >
-                      🔒 Previewing locked: {previewEffect.name}
+                      Locked Preview: {previewEffect.name}
                     </span>
                   ) : previewEffect ? (
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${previewEffect.badgeClass}`}
+                      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${previewEffect.badgeClass}`}
                     >
-                      {previewEffect.icon} Active: {previewEffect.name}
+                      Active: {previewEffect.name}
                       {preference === "auto" ? " (Auto)" : ""}
                     </span>
                   ) : (
@@ -328,7 +337,7 @@ export default function ProfileEffectPicker({
                 : "border-white/12 bg-[#09090b] text-white/75 hover:border-white/25 hover:text-white"
             }`}
           >
-            ✨ Auto (Highest Unlocked)
+            Auto (Highest Unlocked)
           </button>
 
           <button
@@ -350,15 +359,15 @@ export default function ProfileEffectPicker({
         </span>
       </div>
 
-      {/* Left-Side Animated GIF Upload (coexists cleanly with unlocked background effects) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/[0.05] px-3.5 py-3">
+      {/* Profile Banner GIF Upload (Discord-style banner background) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/[0.03] px-3.5 py-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-white">
-            🎞️ Left-Side Animated GIF
+            Profile Banner GIF
           </p>
           <p className="mt-0.5 text-[11px] text-white/55">
-            Displays cleanly on the left side of your card while your unlocked
-            background effect stays active (up to 1.8 MB).
+            Displayed as your Discord-style animated profile banner background
+            (up to 1.8 MB).
           </p>
           {customError && (
             <p className="mt-1 text-[11px] text-red-400">{customError}</p>
@@ -377,7 +386,7 @@ export default function ProfileEffectPicker({
 
           <label
             htmlFor={customFileInputId}
-            className={`inline-flex h-8 cursor-pointer items-center rounded-lg border border-fuchsia-400/35 bg-fuchsia-500/15 px-3 text-xs font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/25 ${
+            className={`inline-flex h-8 cursor-pointer items-center rounded-lg border border-white/20 bg-white/10 px-3 text-xs font-semibold text-white transition hover:bg-white/15 ${
               isSaving || isProcessingCustom
                 ? "pointer-events-none opacity-50"
                 : ""
@@ -386,8 +395,8 @@ export default function ProfileEffectPicker({
             {isProcessingCustom
               ? "Processing..."
               : customGifUrl
-                ? "Change Left GIF"
-                : "Upload Left GIF"}
+                ? "Change Banner GIF"
+                : "Upload Banner GIF"}
           </label>
 
           {customGifUrl && (
@@ -492,7 +501,7 @@ export default function ProfileEffectPicker({
                   </span>
                 ) : (
                   <span className="rounded-full border border-white/15 bg-black/50 px-1.5 py-0.5 text-[10px] font-medium text-white/60">
-                    🔒 Preview
+                    Preview
                   </span>
                 )}
               </div>
@@ -546,12 +555,12 @@ export default function ProfileEffectPicker({
               id="profile-effect-picker-title"
               className="text-lg font-bold text-white"
             >
-              Profile Effects ✨
+              Profile Effects
             </h2>
             <p className="mt-0.5 text-xs text-white/55">
               Equip your unlocked Classic or Anime &amp; Game background effect,
-              pair it with a sharp left-side GIF, or switch to distraction-free
-              mode.
+              pair it with a Discord-style banner GIF, or switch to
+              distraction-free mode.
             </p>
           </div>
 

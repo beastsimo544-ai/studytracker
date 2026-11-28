@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "StudyTracker — Screen Time Guard",
-  "version": "1.0.1",
-  "description": "Tracks active browser time per site and syncs daily distraction vs. study impact to your StudyTracker Dashboard.",
+  "version": "1.0.2",
+  "description": "Tracks active websites only while your StudyTracker timer is running, syncing study-time distractions to your Dashboard.",
   "permissions": [
     "tabs",
     "idle",

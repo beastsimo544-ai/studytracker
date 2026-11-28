@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNotifications } from "@/components/notification-provider";
 import {
+  isAndroidNative,
+  syncAndroidUsageToSupabase,
+} from "@/lib/android-screen-time";
+import {
   cancelPomodoroFinishNotification,
   clearOngoingTimerNotification,
   requestNotificationPermissions,
@@ -14,6 +18,11 @@ import {
 } from "@/lib/notifications";
 import { resolveSubjectColor } from "@/lib/subject-colors";
 import { supabase } from "@/lib/supabase";
+import {
+  broadcastTimerStatusToExtension,
+  closeTimerWindow,
+  openTimerWindow,
+} from "@/lib/timer-windows";
 
 type TimerMode = "stopwatch" | "pomodoro";
 type PomodoroPhase = "focus" | "break";
@@ -212,6 +221,7 @@ export default function TimerPage() {
   const isSyncingCloudRef = useRef(false);
   const pendingCloudPayloadRef = useRef<StoredTaskState | null>(null);
   const lastPullAtRef = useRef<number>(0);
+  const wasFocusRunningRef = useRef(false);
 
   const activeTask =
     tasks.find((task) => task.id === activeTaskId && !task.done) ??
@@ -628,6 +638,9 @@ export default function TimerPage() {
 
       if (user) {
         reconcileTasksWithUser(user);
+        if (wasFocusRunningRef.current && isAndroidNative()) {
+          void syncAndroidUsageToSupabase(user.id);
+        }
       }
     };
 
@@ -694,6 +707,54 @@ export default function TimerPage() {
     startedAt,
     selectedSubject,
     hasHydrated,
+  ]);
+
+  // Track active focus-timer windows for screen time gating (PC extension + Android)
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    const isFocusRunning =
+      startedAt !== null &&
+      (timerMode === "stopwatch" || pomodoroPhase === "focus");
+    const now = Date.now();
+    const endsAt =
+      isFocusRunning && timerMode === "pomodoro"
+        ? startedAt + Math.max(0, focusMinutes * 60 * 1000 - accumulatedMs)
+        : null;
+
+    if (isFocusRunning) {
+      openTimerWindow(startedAt, now);
+    } else {
+      closeTimerWindow(now);
+    }
+
+    broadcastTimerStatusToExtension({
+      active: isFocusRunning,
+      subject: selectedSubject || null,
+      timerMode,
+      startedAt: isFocusRunning ? startedAt : null,
+      endsAt,
+      updatedAt: now,
+    });
+
+    if (
+      wasFocusRunningRef.current &&
+      !isFocusRunning &&
+      isAndroidNative() &&
+      currentUserIdRef.current
+    ) {
+      void syncAndroidUsageToSupabase(currentUserIdRef.current);
+    }
+
+    wasFocusRunningRef.current = isFocusRunning;
+  }, [
+    hasHydrated,
+    startedAt,
+    accumulatedMs,
+    timerMode,
+    pomodoroPhase,
+    focusMinutes,
+    selectedSubject,
   ]);
 
   const completePomodoroBlock = useCallback(

@@ -91,10 +91,9 @@ export function ProfileEffectPill({
   return (
     <span
       title={`${effect.name} — ${effect.description}`}
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${effect.badgeClass}`}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-wide ${effect.badgeClass}`}
     >
-      <span aria-hidden="true">{effect.icon}</span>
-      <span>{effect.name}</span>
+      {effect.name}
     </span>
   );
 }

@@ -477,7 +477,15 @@ export default function SettingsPage() {
 
       {/* PROFILE PICTURE & ACCOUNT SUMMARY */}
       <section className="mt-5 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
-        <h2 className="text-base font-semibold">Profile</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold">Profile</h2>
+          <Link
+            href="/profile"
+            className="inline-flex h-8 items-center rounded-lg border border-white/15 bg-[#09090b] px-3 text-xs font-medium text-white/85 transition hover:border-white/30 hover:text-white"
+          >
+            View Profile →
+          </Link>
+        </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-4 border-b border-white/[0.08] pb-4">
           <UserAvatar
@@ -563,10 +571,10 @@ export default function SettingsPage() {
       <section className="mt-4 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold">Profile Effects ✨</h2>
+            <h2 className="text-base font-semibold">Profile Effects</h2>
             <p className="mt-0.5 text-xs text-white/50">
-              Animated Discord-style profile effects unlocked from your study
-              achievements, shown on Friends &amp; Group leaderboards.
+              Discord-style banner GIF and animated effects unlocked from your
+              study achievements, shown on your Profile and Friends leaderboards.
             </p>
           </div>
 

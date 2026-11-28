@@ -1,9 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import ChampionQuoteBanner from "@/components/champion-quote-banner";
-import CustomGifBanner from "@/components/custom-gif-banner";
 import { useNotifications } from "@/components/notification-provider";
 import ProfileEffectOverlay, {
   ProfileEffectPill,
@@ -1415,14 +1415,19 @@ export default function FriendsPage() {
 
     return entries.map((entry, index) => {
       const rank = index + 1;
-      const medal =
+      const rankBadgeClass =
         rank === 1
-          ? "🥇"
+          ? "border-amber-400/35 bg-amber-400/10 text-amber-300"
           : rank === 2
-            ? "🥈"
+            ? "border-zinc-400/30 bg-zinc-400/10 text-zinc-200"
             : rank === 3
-              ? "🥉"
-              : `#${rank}`;
+              ? "border-orange-400/30 bg-orange-400/10 text-orange-300"
+              : "border-white/10 bg-white/[0.04] text-white/55";
+      const profileHref = entry.is_self
+        ? "/profile"
+        : entry.username && entry.username !== "student"
+          ? `/profile?u=${encodeURIComponent(entry.username)}`
+          : `/profile?id=${encodeURIComponent(entry.user_id)}`;
       const activeSeconds =
         leaderboardPeriod === "today"
           ? entry.today_seconds
@@ -1460,61 +1465,50 @@ export default function FriendsPage() {
         >
           <ProfileEffectOverlay effectId={entry.active_effect} />
 
-          <div className="relative z-10 flex flex-col gap-3.5 p-4 sm:flex-row sm:items-stretch sm:p-5">
-            {!effectsDisabled && entry.custom_gif_url && (
-              <CustomGifBanner
-                gifUrl={entry.custom_gif_url}
-                username={entry.username}
-                sizeClass="h-36 w-full sm:h-auto sm:w-28 md:w-32"
-              />
-            )}
-
-            <div className="min-w-0 flex-1">
-            {/* Top Row: Identity + Desktop Stats + Remove */}
+          <div className="relative z-10 p-4 sm:p-5">
+            {/* Top Row: Identity + Desktop Stats + Actions */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="w-6 shrink-0 text-center text-base font-bold sm:text-lg">
-                    {medal}
+                  <span
+                    className={`inline-flex h-7 min-w-8 shrink-0 items-center justify-center rounded-lg border px-1.5 font-mono text-xs font-bold tabular-nums ${rankBadgeClass}`}
+                  >
+                    #{rank}
                   </span>
 
-                  <UserAvatar
-                    avatarUrl={entry.avatar_url}
-                    name={entry.username}
-                    size="sm"
-                    effectId={entry.active_effect}
-                  />
+                  <Link
+                    href={profileHref}
+                    className="group flex min-w-0 items-center gap-3"
+                  >
+                    <UserAvatar
+                      avatarUrl={entry.avatar_url}
+                      name={entry.username}
+                      size="sm"
+                      effectId={entry.active_effect}
+                    />
+                  </Link>
 
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="truncate font-mono text-sm font-bold sm:text-base">
+                      <Link
+                        href={profileHref}
+                        className="truncate font-mono text-sm font-bold text-white transition hover:underline sm:text-base"
+                      >
                         @{entry.username}
-                      </span>
+                      </Link>
                       {entry.is_self && (
                         <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/90">
                           You
                         </span>
                       )}
                       {isWeeklyChampion && (
-                        <span className="rounded-full border border-amber-400/35 bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
-                          👑 #1
+                        <span className="rounded-full border border-amber-400/35 bg-amber-400/12 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                          Top Today
                         </span>
                       )}
                       {entry.current_streak > 0 && (
-                        <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold text-orange-300 tabular-nums">
-                          🔥 {entry.current_streak}d
-                        </span>
-                      )}
-                      {entry.unlocked_badges.length > 0 && (
-                        <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[11px]">
-                          {entry.unlocked_badges.map((b) => (
-                            <span
-                              key={b.id}
-                              title={`${b.title} — ${b.description}`}
-                            >
-                              {b.icon}
-                            </span>
-                          ))}
+                        <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-white/75 tabular-nums">
+                          {entry.current_streak}d streak
                         </span>
                       )}
                       <ProfileEffectPill effectId={entry.active_effect} />
@@ -1535,19 +1529,27 @@ export default function FriendsPage() {
                 </div>
               </div>
 
-              {relation && (
-                <button
-                  onClick={() =>
-                    removeFriendship(
-                      relation.id,
-                      `Remove @${entry.username} from your friends?`
-                    )
-                  }
-                  className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/45 transition hover:border-red-500/30 hover:text-red-400 sm:hidden"
+              <div className="flex shrink-0 items-center gap-1.5 sm:hidden">
+                <Link
+                  href={profileHref}
+                  className="rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/80 transition hover:border-white/25 hover:text-white"
                 >
-                  Remove
-                </button>
-              )}
+                  Profile
+                </Link>
+                {relation && (
+                  <button
+                    onClick={() =>
+                      removeFriendship(
+                        relation.id,
+                        `Remove @${entry.username} from your friends?`
+                      )
+                    }
+                    className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/45 transition hover:border-red-500/30 hover:text-red-400"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Symmetrical 50/50 Grid on Mobile, Compact Pair on Desktop */}
@@ -1583,6 +1585,13 @@ export default function FriendsPage() {
                   </p>
                 </div>
               </div>
+
+              <Link
+                href={profileHref}
+                className="hidden h-8 shrink-0 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 text-xs font-medium text-white/80 transition hover:border-white/25 hover:text-white sm:inline-flex sm:items-center"
+              >
+                Profile
+              </Link>
 
               {relation && (
                 <button
@@ -1630,7 +1639,6 @@ export default function FriendsPage() {
               ))
             )}
           </div>
-            </div>
           </div>
         </div>
       );
@@ -1684,14 +1692,14 @@ export default function FriendsPage() {
             role="switch"
             aria-checked={effectsDisabled}
             onClick={() => notifyEffectsDisabledUpdated(!effectsDisabled)}
-            title="Toggle distraction-free mode (hide all profile effects and GIF banners)"
-            className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition ${
+            title="Toggle distraction-free mode (hide all profile effects and banner GIFs)"
+            className={`inline-flex h-9 shrink-0 items-center rounded-xl border px-3 text-xs font-semibold transition ${
               effectsDisabled
                 ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
                 : "border-white/10 bg-[#111113] text-white/75 hover:border-white/25 hover:text-white"
             }`}
           >
-            <span>{effectsDisabled ? "🚫 Effects Off" : "✨ Effects On"}</span>
+            <span>{effectsDisabled ? "Effects Off" : "Effects On"}</span>
           </button>
 
           <div className="inline-flex h-9 shrink-0 items-center rounded-xl border border-white/10 bg-[#111113] p-1">
@@ -1734,16 +1742,7 @@ export default function FriendsPage() {
           >
             <ProfileEffectOverlay effectId={myActiveEffect?.id ?? null} />
 
-            <div className="relative z-10 flex flex-col gap-3.5 p-4 sm:flex-row sm:items-center sm:p-5">
-              {!effectsDisabled && myCustomGifUrl && (
-                <CustomGifBanner
-                  gifUrl={myCustomGifUrl}
-                  username={myUsername}
-                  sizeClass="h-36 w-full sm:h-28 sm:w-32"
-                />
-              )}
-
-              <div className="min-w-0 flex-1">
+            <div className="relative z-10 p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3.5">
                 <UserAvatar
@@ -1761,9 +1760,12 @@ export default function FriendsPage() {
                     <ProfileEffectPill effectId={myActiveEffect?.id ?? null} />
                   </div>
                   {myUsername && !isEditingUsername ? (
-                    <p className="font-mono text-base font-bold sm:text-lg">
+                    <Link
+                      href="/profile"
+                      className="font-mono text-base font-bold text-white transition hover:underline sm:text-lg"
+                    >
                       @{myUsername}
-                    </p>
+                    </Link>
                   ) : (
                     <p className="text-xs text-white/65">
                       Choose a unique @username so friends can find you.
@@ -1782,12 +1784,19 @@ export default function FriendsPage() {
                   className="sr-only"
                 />
 
+                <Link
+                  href="/profile"
+                  className="inline-flex h-9 items-center rounded-xl bg-white px-3.5 text-xs font-semibold text-black transition hover:bg-white/90"
+                >
+                  View Profile
+                </Link>
+
                 <button
                   type="button"
                   onClick={() => setIsEffectPickerOpen(true)}
                   className="h-9 rounded-xl border border-white/15 bg-[#09090b]/80 px-3 text-xs font-medium text-white/90 transition hover:border-white/30 hover:bg-white/5"
                 >
-                  ✨ Profile Effect
+                  Customize Profile
                 </button>
 
                 <label
@@ -1866,7 +1875,6 @@ export default function FriendsPage() {
             {usernameMessage && (
               <p className="mt-2.5 text-xs text-white/70">{usernameMessage}</p>
             )}
-              </div>
             </div>
           </section>
 
@@ -2001,16 +2009,23 @@ export default function FriendsPage() {
                         key={profile.user_id}
                         className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#09090b] px-3.5 py-2.5"
                       >
-                        <div className="flex min-w-0 items-center gap-2.5">
+                        <Link
+                          href={
+                            profile.username
+                              ? `/profile?u=${encodeURIComponent(profile.username)}`
+                              : `/profile?id=${encodeURIComponent(profile.user_id)}`
+                          }
+                          className="flex min-w-0 items-center gap-2.5 transition hover:opacity-90"
+                        >
                           <UserAvatar
                             avatarUrl={profile.avatar_url}
                             name={profile.username}
                             size="xs"
                           />
-                          <span className="truncate font-mono text-xs font-medium sm:text-sm">
+                          <span className="truncate font-mono text-xs font-medium hover:underline sm:text-sm">
                             @{profile.username}
                           </span>
-                        </div>
+                        </Link>
 
                         {!relation ? (
                           <button
