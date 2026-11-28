@@ -4,9 +4,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useNotifications } from "@/components/notification-provider";
+import ProfileEffectPicker from "@/components/profile-effect-picker";
 import StudyCardModal from "@/components/study-card-modal";
 import StudyHeatmap from "@/components/study-heatmap";
 import { evaluateAchievements } from "@/lib/achievements";
+import {
+  getProfileEffectForAchievement,
+  loadLocalProfileEffectPref,
+  parseProfileEffectPreference,
+  resolveActiveProfileEffect,
+  saveResolvedActiveEffectId,
+  type ProfileEffectPreference,
+} from "@/lib/profile-effects";
 import { resolveSubjectColor } from "@/lib/subject-colors";
 import { supabase } from "@/lib/supabase";
 
@@ -51,6 +60,8 @@ export default function Dashboard() {
   const [username, setUsername] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [showShareCard, setShowShareCard] = useState(false);
+  const [effectPref, setEffectPref] = useState<ProfileEffectPreference>("auto");
+  const [isEffectPickerOpen, setIsEffectPickerOpen] = useState(false);
 
   const [exams, setExams] = useState<ExamItem[]>([]);
   const [examsUseLocalFallback, setExamsUseLocalFallback] = useState(false);
@@ -78,7 +89,7 @@ export default function Dashboard() {
 
       const fullProfileRes = await supabase
         .from("profiles")
-        .select("daily_goal_minutes, username, avatar_url")
+        .select("daily_goal_minutes, username, avatar_url, profile_effect")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -86,31 +97,43 @@ export default function Dashboard() {
         daily_goal_minutes?: number | null;
         username?: string | null;
         avatar_url?: string | null;
+        profile_effect?: string | null;
       } | null = null;
 
       if (
         fullProfileRes.error &&
-        (fullProfileRes.error.message.includes("avatar_url") ||
+        (fullProfileRes.error.message.includes("profile_effect") ||
+          fullProfileRes.error.message.includes("avatar_url") ||
           fullProfileRes.error.message.includes("username"))
       ) {
-        const midProfileRes = await supabase
+        const avatarProfileRes = await supabase
           .from("profiles")
-          .select("daily_goal_minutes, username")
+          .select("daily_goal_minutes, username, avatar_url")
           .eq("user_id", user.id)
           .maybeSingle();
 
-        if (!midProfileRes.error) {
-          resolvedProfile = midProfileRes.data;
+        if (!avatarProfileRes.error) {
+          resolvedProfile = avatarProfileRes.data;
         } else {
-          const basicProfileRes = await supabase
+          const midProfileRes = await supabase
             .from("profiles")
-            .select("daily_goal_minutes")
+            .select("daily_goal_minutes, username")
             .eq("user_id", user.id)
             .maybeSingle();
-          if (basicProfileRes.error) {
-            console.error(basicProfileRes.error);
+
+          if (!midProfileRes.error) {
+            resolvedProfile = midProfileRes.data;
           } else {
-            resolvedProfile = basicProfileRes.data;
+            const basicProfileRes = await supabase
+              .from("profiles")
+              .select("daily_goal_minutes")
+              .eq("user_id", user.id)
+              .maybeSingle();
+            if (basicProfileRes.error) {
+              console.error(basicProfileRes.error);
+            } else {
+              resolvedProfile = basicProfileRes.data;
+            }
           }
         }
       } else if (fullProfileRes.error) {
@@ -118,6 +141,11 @@ export default function Dashboard() {
       } else {
         resolvedProfile = fullProfileRes.data;
       }
+
+      const nextEffectPref = resolvedProfile?.profile_effect
+        ? parseProfileEffectPreference(resolvedProfile.profile_effect)
+        : loadLocalProfileEffectPref();
+      setEffectPref(nextEffectPref);
 
       if (resolvedProfile) {
         if (typeof resolvedProfile.daily_goal_minutes === "number") {
@@ -569,6 +597,29 @@ export default function Dashboard() {
 
   const achievements = evaluateAchievements(sessions);
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
+  const activeProfileEffect = resolveActiveProfileEffect(
+    effectPref,
+    achievements.filter((a) => a.unlocked).map((a) => a.id)
+  );
+
+  useEffect(() => {
+    if (isLoading) return;
+    saveResolvedActiveEffectId(activeProfileEffect?.id ?? null);
+  }, [isLoading, activeProfileEffect]);
+
+  useEffect(() => {
+    const handleEffectUpdated = (event: Event) => {
+      const custom = event as CustomEvent<{
+        preference?: ProfileEffectPreference;
+      }>;
+      if (custom.detail?.preference) {
+        setEffectPref(custom.detail.preference);
+      }
+    };
+    window.addEventListener("profile-effect-updated", handleEffectUpdated);
+    return () =>
+      window.removeEventListener("profile-effect-updated", handleEffectUpdated);
+  }, []);
 
   const summarizePeriodSubjects = (list: StudySession[]) => {
     const totals: Record<string, number> = {};
@@ -1090,44 +1141,68 @@ export default function Dashboard() {
 
       {/* ACHIEVEMENTS & BADGES (2-COL ON MOBILE, 4-COL ON DESKTOP) */}
       <section className="mt-6 sm:mt-8">
-        <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-base font-semibold sm:text-lg">
-            Achievements 🏆
-          </h2>
-          <p className="text-xs text-white/50 tabular-nums">
-            {unlockedCount} / {achievements.length} unlocked
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-base font-semibold sm:text-lg">
+              Achievements 🏆
+            </h2>
+            <p className="mt-0.5 text-xs text-white/50 tabular-nums">
+              {unlockedCount} / {achievements.length} unlocked
+              {activeProfileEffect
+                ? ` · Active effect: ${activeProfileEffect.icon} ${activeProfileEffect.name}`
+                : ""}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsEffectPickerOpen(true)}
+            className="h-9 rounded-xl border border-white/15 bg-[#111113] px-3 text-xs font-semibold text-white/90 transition hover:border-white/30 hover:bg-white/[0.06]"
+          >
+            ✨ Profile Effects
+          </button>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {achievements.map((badge) => (
-            <div
-              key={badge.id}
-              className={`rounded-2xl border p-3.5 transition sm:p-4 ${
-                badge.unlocked
-                  ? "border-amber-500/35 bg-amber-500/[0.08]"
-                  : "border-white/[0.07] bg-[#111113] opacity-55"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-xl">{badge.icon}</span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
-                    badge.unlocked
-                      ? "bg-amber-400/20 text-amber-200"
-                      : "bg-white/10 text-white/55"
-                  }`}
-                >
-                  {badge.unlocked ? "Unlocked" : badge.progressText}
-                </span>
-              </div>
+          {achievements.map((badge) => {
+            const effectReward = getProfileEffectForAchievement(badge.id);
 
-              <p className="mt-2.5 text-sm font-semibold">{badge.title}</p>
-              <p className="mt-0.5 text-[11px] leading-snug text-white/60">
-                {badge.description}
-              </p>
-            </div>
-          ))}
+            return (
+              <div
+                key={badge.id}
+                className={`rounded-2xl border p-3.5 transition sm:p-4 ${
+                  badge.unlocked
+                    ? "border-amber-500/35 bg-amber-500/[0.08]"
+                    : "border-white/[0.07] bg-[#111113] opacity-55"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xl">{badge.icon}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
+                      badge.unlocked
+                        ? "bg-amber-400/20 text-amber-200"
+                        : "bg-white/10 text-white/55"
+                    }`}
+                  >
+                    {badge.unlocked ? "Unlocked" : badge.progressText}
+                  </span>
+                </div>
+
+                <p className="mt-2.5 text-sm font-semibold">{badge.title}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-white/60">
+                  {badge.description}
+                </p>
+
+                {effectReward && (
+                  <p className="mt-2 text-[10px] font-medium text-white/55">
+                    ✨ Unlocks{" "}
+                    <span className="text-white/85">{effectReward.name}</span>
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -1203,6 +1278,18 @@ export default function Dashboard() {
           weekSubjects: weekSubjectSummary,
           weekDays: weekCardDays,
         }}
+      />
+
+      <ProfileEffectPicker
+        mode="modal"
+        open={isEffectPickerOpen}
+        onClose={() => setIsEffectPickerOpen(false)}
+        userId={currentUserId}
+        username={username}
+        avatarUrl={avatarUrl}
+        achievements={achievements}
+        preference={effectPref}
+        onPreferenceChange={(nextPref) => setEffectPref(nextPref)}
       />
     </main>
   );

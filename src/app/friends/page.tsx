@@ -4,9 +4,28 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ChampionQuoteBanner from "@/components/champion-quote-banner";
 import { useNotifications } from "@/components/notification-provider";
+import ProfileEffectOverlay, {
+  ProfileEffectPill,
+} from "@/components/profile-effect-overlay";
+import ProfileEffectPicker from "@/components/profile-effect-picker";
 import UserAvatar from "@/components/user-avatar";
 import { evaluateAchievements, type Achievement } from "@/lib/achievements";
 import { notifyAvatarUpdated, resizeAvatarFile } from "@/lib/avatar";
+import {
+  encodeDailyChampionQuote,
+  parseDailyChampionQuote,
+  toLocalDateKey,
+  type ChampionQuoteDraft,
+} from "@/lib/champion-quote";
+import {
+  getProfileEffectById,
+  loadLocalProfileEffectPref,
+  parseProfileEffectPreference,
+  resolveActiveProfileEffect,
+  saveResolvedActiveEffectId,
+  type ProfileEffectId,
+  type ProfileEffectPreference,
+} from "@/lib/profile-effects";
 import { supabase } from "@/lib/supabase";
 
 type ProfileRow = {
@@ -17,6 +36,7 @@ type ProfileRow = {
   studying_subject?: string | null;
   studying_started_at?: string | null;
   champion_quote?: string | null;
+  profile_effect?: string | null;
 };
 
 type FriendshipRow = {
@@ -62,6 +82,7 @@ type ProfileMeta = {
   studyingSubject: string | null;
   studyingStartedAt: string | null;
   championQuote: string | null;
+  profileEffect: string | null;
 };
 
 type LeaderboardEntry = {
@@ -73,6 +94,7 @@ type LeaderboardEntry = {
   week_seconds: number;
   current_streak: number;
   unlocked_badges: Achievement[];
+  active_effect: ProfileEffectId | null;
   studying_subject: string | null;
   studying_started_at: string | null;
   champion_quote: string | null;
@@ -90,13 +112,6 @@ function generateInviteCode() {
     code += INVITE_CHARS[Math.floor(Math.random() * INVITE_CHARS.length)];
   }
   return code;
-}
-
-function toLocalDateKey(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
 }
 
 function computeCurrentStreak(sessionDates: string[]) {
@@ -216,11 +231,16 @@ function buildLeaderboardEntries(
       memberSessions.map((s) => s.created_at)
     );
 
+    const meta = profileLookup[memberId];
     const unlockedBadges = evaluateAchievements(memberSessions).filter(
       (b) => b.unlocked
     );
+    const activeEffect =
+      resolveActiveProfileEffect(
+        meta?.profileEffect ?? "auto",
+        unlockedBadges.map((b) => b.id)
+      )?.id ?? null;
 
-    const meta = profileLookup[memberId];
     let activeStudyingSubject: string | null = null;
     let activeStudyingStartedAt: string | null = null;
 
@@ -245,6 +265,7 @@ function buildLeaderboardEntries(
       week_seconds: weekSeconds,
       current_streak: currentStreak,
       unlocked_badges: unlockedBadges,
+      active_effect: activeEffect,
       studying_subject: activeStudyingSubject,
       studying_started_at: activeStudyingStartedAt,
       champion_quote: meta?.championQuote ?? null,
@@ -259,18 +280,6 @@ function isTodayIso(iso: string | null | undefined): boolean {
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return false;
   return toLocalDateKey(parsed) === toLocalDateKey(new Date());
-}
-
-function parseDailyProfileQuote(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const match = raw.match(/^(\d{4}-\d{2}-\d{2})\|([\s\S]*)$/);
-  if (match) {
-    if (match[1] !== toLocalDateKey(new Date())) {
-      return null;
-    }
-    return match[2].trim() || null;
-  }
-  return raw.trim() || null;
 }
 
 function getDailyChampion(entries: LeaderboardEntry[]) {
@@ -337,6 +346,9 @@ export default function FriendsPage() {
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [isJoiningGroup, setIsJoiningGroup] = useState(false);
   const [isSavingQuote, setIsSavingQuote] = useState(false);
+  const [myEffectPref, setMyEffectPref] =
+    useState<ProfileEffectPreference>("auto");
+  const [isEffectPickerOpen, setIsEffectPickerOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [setupRequired, setSetupRequired] = useState(false);
@@ -347,56 +359,69 @@ export default function FriendsPage() {
     const fullProfileRes = await supabase
       .from("profiles")
       .select(
-        "user_id, username, avatar_url, daily_goal_minutes, studying_subject, studying_started_at, champion_quote"
+        "user_id, username, avatar_url, daily_goal_minutes, studying_subject, studying_started_at, champion_quote, profile_effect"
       )
       .eq("user_id", userId)
       .maybeSingle();
 
     if (fullProfileRes.error) {
       if (
+        fullProfileRes.error.message.includes("profile_effect") ||
         fullProfileRes.error.message.includes("champion_quote") ||
         fullProfileRes.error.message.includes("avatar_url") ||
         fullProfileRes.error.message.includes("studying_")
       ) {
-        const avatarStudyRes = await supabase
+        const quoteProfileRes = await supabase
           .from("profiles")
           .select(
-            "user_id, username, avatar_url, daily_goal_minutes, studying_subject, studying_started_at"
+            "user_id, username, avatar_url, daily_goal_minutes, studying_subject, studying_started_at, champion_quote"
           )
           .eq("user_id", userId)
           .maybeSingle();
 
-        if (!avatarStudyRes.error) {
-          myProfile = avatarStudyRes.data as ProfileRow | null;
+        if (!quoteProfileRes.error) {
+          myProfile = quoteProfileRes.data as ProfileRow | null;
         } else {
-          const midRes = await supabase
+          const avatarStudyRes = await supabase
             .from("profiles")
             .select(
-              "user_id, username, daily_goal_minutes, studying_subject, studying_started_at"
+              "user_id, username, avatar_url, daily_goal_minutes, studying_subject, studying_started_at"
             )
             .eq("user_id", userId)
             .maybeSingle();
 
-          if (!midRes.error) {
-            myProfile = midRes.data as ProfileRow | null;
+          if (!avatarStudyRes.error) {
+            myProfile = avatarStudyRes.data as ProfileRow | null;
           } else {
-            const basicProfileRes = await supabase
+            const midRes = await supabase
               .from("profiles")
-              .select("user_id, username, daily_goal_minutes")
+              .select(
+                "user_id, username, daily_goal_minutes, studying_subject, studying_started_at"
+              )
               .eq("user_id", userId)
               .maybeSingle();
 
-            if (basicProfileRes.error) {
-              if (
-                basicProfileRes.error.message.includes("username") ||
-                basicProfileRes.error.code === "42703"
-              ) {
-                setSetupRequired(true);
-                setIsLoading(false);
-                return;
-              }
+            if (!midRes.error) {
+              myProfile = midRes.data as ProfileRow | null;
             } else {
-              myProfile = basicProfileRes.data as ProfileRow | null;
+              const basicProfileRes = await supabase
+                .from("profiles")
+                .select("user_id, username, daily_goal_minutes")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+              if (basicProfileRes.error) {
+                if (
+                  basicProfileRes.error.message.includes("username") ||
+                  basicProfileRes.error.code === "42703"
+                ) {
+                  setSetupRequired(true);
+                  setIsLoading(false);
+                  return;
+                }
+              } else {
+                myProfile = basicProfileRes.data as ProfileRow | null;
+              }
             }
           }
         }
@@ -416,6 +441,10 @@ export default function FriendsPage() {
 
     let resolvedMyUsername: string | null = null;
     let resolvedMyAvatar: string | null = null;
+    const resolvedMyEffectPref = myProfile?.profile_effect
+      ? parseProfileEffectPreference(myProfile.profile_effect)
+      : loadLocalProfileEffectPref();
+    setMyEffectPref(resolvedMyEffectPref);
 
     if (myProfile) {
       setHasProfileRow(true);
@@ -533,6 +562,7 @@ export default function FriendsPage() {
         studyingSubject: myProfile?.studying_subject ?? null,
         studyingStartedAt: myProfile?.studying_started_at ?? null,
         championQuote: myProfile?.champion_quote ?? null,
+        profileEffect: resolvedMyEffectPref,
       },
     };
 
@@ -540,36 +570,47 @@ export default function FriendsPage() {
       const fullRelatedRes = await supabase
         .from("profiles")
         .select(
-          "user_id, username, avatar_url, studying_subject, studying_started_at, champion_quote"
+          "user_id, username, avatar_url, studying_subject, studying_started_at, champion_quote, profile_effect"
         )
         .in("user_id", otherUserIds);
 
       let relatedProfiles: ProfileRow[] | null = null;
 
       if (fullRelatedRes.error) {
-        const avatarStudyRelatedRes = await supabase
+        const quoteRelatedRes = await supabase
           .from("profiles")
           .select(
-            "user_id, username, avatar_url, studying_subject, studying_started_at"
+            "user_id, username, avatar_url, studying_subject, studying_started_at, champion_quote"
           )
           .in("user_id", otherUserIds);
 
-        if (!avatarStudyRelatedRes.error) {
-          relatedProfiles = (avatarStudyRelatedRes.data || []) as ProfileRow[];
+        if (!quoteRelatedRes.error) {
+          relatedProfiles = (quoteRelatedRes.data || []) as ProfileRow[];
         } else {
-          const midRelatedRes = await supabase
+          const avatarStudyRelatedRes = await supabase
             .from("profiles")
-            .select("user_id, username, studying_subject, studying_started_at")
+            .select(
+              "user_id, username, avatar_url, studying_subject, studying_started_at"
+            )
             .in("user_id", otherUserIds);
 
-          if (!midRelatedRes.error) {
-            relatedProfiles = (midRelatedRes.data || []) as ProfileRow[];
+          if (!avatarStudyRelatedRes.error) {
+            relatedProfiles = (avatarStudyRelatedRes.data || []) as ProfileRow[];
           } else {
-            const basicRelatedRes = await supabase
+            const midRelatedRes = await supabase
               .from("profiles")
-              .select("user_id, username")
+              .select("user_id, username, studying_subject, studying_started_at")
               .in("user_id", otherUserIds);
-            relatedProfiles = (basicRelatedRes.data || []) as ProfileRow[];
+
+            if (!midRelatedRes.error) {
+              relatedProfiles = (midRelatedRes.data || []) as ProfileRow[];
+            } else {
+              const basicRelatedRes = await supabase
+                .from("profiles")
+                .select("user_id, username")
+                .in("user_id", otherUserIds);
+              relatedProfiles = (basicRelatedRes.data || []) as ProfileRow[];
+            }
           }
         }
       } else {
@@ -587,6 +628,7 @@ export default function FriendsPage() {
           studyingSubject: p.studying_subject ?? null,
           studyingStartedAt: p.studying_started_at ?? null,
           championQuote: p.champion_quote ?? null,
+          profileEffect: p.profile_effect ?? null,
         };
       });
     }
@@ -620,17 +662,22 @@ export default function FriendsPage() {
     const allSessions = (sessionRows || []) as SessionRow[];
     const currentTimestamp = Date.now();
 
+    const nextLeaderboard = buildLeaderboardEntries(
+      friendsCircleIds,
+      allSessions,
+      profileLookup,
+      userId,
+      currentTimestamp
+    );
+
+    const selfEntry = nextLeaderboard.find((entry) => entry.is_self);
+    if (selfEntry) {
+      saveResolvedActiveEffectId(selfEntry.active_effect);
+    }
+
     setCachedSessions(allSessions);
     setSnapshotTimestamp(currentTimestamp);
-    setLeaderboard(
-      buildLeaderboardEntries(
-        friendsCircleIds,
-        allSessions,
-        profileLookup,
-        userId,
-        currentTimestamp
-      )
-    );
+    setLeaderboard(nextLeaderboard);
     setNowMs(currentTimestamp);
     setSetupRequired(false);
     setIsLoading(false);
@@ -695,11 +742,58 @@ export default function FriendsPage() {
       )
       .subscribe();
 
+    const handleEffectUpdated = (event: Event) => {
+      const custom = event as CustomEvent<{
+        preference?: ProfileEffectPreference;
+        resolvedEffectId?: ProfileEffectId | null;
+      }>;
+      const nextPref = custom.detail?.preference;
+      const nextEffectId = custom.detail?.resolvedEffectId ?? null;
+      if (nextPref) {
+        setMyEffectPref(nextPref);
+      }
+      if (activeUserId) {
+        const uid = activeUserId;
+        setCachedProfileLookup((prev) => {
+          const existing = prev[uid];
+          if (!existing || !nextPref) return prev;
+          return {
+            ...prev,
+            [uid]: { ...existing, profileEffect: nextPref },
+          };
+        });
+        setLeaderboard((prev) =>
+          prev.map((entry) =>
+            entry.is_self ? { ...entry, active_effect: nextEffectId } : entry
+          )
+        );
+      }
+    };
+
+    window.addEventListener("profile-effect-updated", handleEffectUpdated);
+
     return () => {
       clearInterval(pollInterval);
       supabase.removeChannel(channel);
+      window.removeEventListener("profile-effect-updated", handleEffectUpdated);
     };
   }, [router, loadFriendsData]);
+
+  const myAchievements = useMemo(() => {
+    if (!currentUserId) return evaluateAchievements([]);
+    return evaluateAchievements(
+      cachedSessions.filter((s) => s.user_id === currentUserId)
+    );
+  }, [cachedSessions, currentUserId]);
+
+  const myActiveEffect = useMemo(
+    () =>
+      resolveActiveProfileEffect(
+        myEffectPref,
+        myAchievements.filter((a) => a.unlocked).map((a) => a.id)
+      ),
+    [myEffectPref, myAchievements]
+  );
 
   const selectedGroup = useMemo(
     () => myGroups.find((g) => g.id === selectedGroupId) ?? myGroups[0] ?? null,
@@ -1142,14 +1236,16 @@ export default function FriendsPage() {
     }
   };
 
-  const handleSaveFriendsQuote = async (nextQuote: string): Promise<boolean> => {
+  const handleSaveFriendsQuote = async (
+    draftQuote: ChampionQuoteDraft
+  ): Promise<boolean> => {
     if (!currentUserId || isSavingQuote) return false;
     setIsSavingQuote(true);
 
-    const cleaned = nextQuote.trim().slice(0, 140) || null;
-    const payloadQuote = cleaned
-      ? `${toLocalDateKey(new Date())}|${cleaned}`
-      : null;
+    const payloadQuote = encodeDailyChampionQuote(
+      draftQuote.text,
+      draftQuote.imageUrl
+    );
     const { error } = await supabase
       .from("profiles")
       .update({ champion_quote: payloadQuote })
@@ -1170,7 +1266,9 @@ export default function FriendsPage() {
     }
 
     toast.success(
-      cleaned ? "Today's champion quote updated! 👑" : "Champion quote cleared"
+      payloadQuote
+        ? "Today's champion quote updated! 👑"
+        : "Champion quote & photo cleared"
     );
     await loadFriendsData(currentUserId);
     return true;
@@ -1178,18 +1276,23 @@ export default function FriendsPage() {
 
   const handleSaveGroupQuote = async (
     groupId: number,
-    nextQuote: string
+    draftQuote: ChampionQuoteDraft
   ): Promise<boolean> => {
     if (!currentUserId || isSavingQuote) return false;
     setIsSavingQuote(true);
 
-    const cleaned = nextQuote.trim().slice(0, 140) || null;
+    const payloadQuote = encodeDailyChampionQuote(
+      draftQuote.text,
+      draftQuote.imageUrl
+    );
     const { error } = await supabase
       .from("study_groups")
       .update({
-        champion_quote: cleaned,
-        champion_quote_author_id: cleaned ? currentUserId : null,
-        champion_quote_updated_at: new Date().toISOString(),
+        champion_quote: payloadQuote,
+        champion_quote_author_id: payloadQuote ? currentUserId : null,
+        champion_quote_updated_at: payloadQuote
+          ? new Date().toISOString()
+          : null,
       })
       .eq("id", groupId);
 
@@ -1201,7 +1304,9 @@ export default function FriendsPage() {
     }
 
     toast.success(
-      cleaned ? "Today's group quote updated! 👑" : "Group quote cleared"
+      payloadQuote
+        ? "Today's group quote updated! 👑"
+        : "Group quote & photo cleared"
     );
     await loadFriendsData(currentUserId);
     return true;
@@ -1298,63 +1403,73 @@ export default function FriendsPage() {
         entry.studying_subject && entry.studying_started_at
       );
       const isWeeklyChampion = championUserId === entry.user_id;
+      const cardEffect = getProfileEffectById(entry.active_effect);
 
       return (
         <div
           key={entry.user_id}
-          className={`rounded-2xl border p-4 sm:p-5 ${
-            entry.is_self
-              ? "border-white/25 bg-[#151518]"
-              : "border-white/[0.08] bg-[#111113]"
+          className={`relative overflow-hidden rounded-2xl border p-4 sm:p-5 ${
+            cardEffect
+              ? `${cardEffect.borderClass} ${
+                  entry.is_self ? "bg-[#151518]" : "bg-[#111113]"
+                }`
+              : entry.is_self
+                ? "border-white/25 bg-[#151518]"
+                : "border-white/[0.08] bg-[#111113]"
           }`}
         >
-          {/* Top Row: Identity + Desktop Stats + Remove */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="w-6 shrink-0 text-center text-base font-bold sm:text-lg">
-                  {medal}
-                </span>
+          <ProfileEffectOverlay effectId={entry.active_effect} />
 
-                <UserAvatar
-                  avatarUrl={entry.avatar_url}
-                  name={entry.username}
-                  size="sm"
-                />
+          <div className="relative z-10">
+            {/* Top Row: Identity + Desktop Stats + Remove */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="w-6 shrink-0 text-center text-base font-bold sm:text-lg">
+                    {medal}
+                  </span>
 
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="truncate font-mono text-sm font-bold sm:text-base">
-                      @{entry.username}
-                    </span>
-                    {entry.is_self && (
-                      <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/90">
-                        You
+                  <UserAvatar
+                    avatarUrl={entry.avatar_url}
+                    name={entry.username}
+                    size="sm"
+                    effectId={entry.active_effect}
+                  />
+
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="truncate font-mono text-sm font-bold sm:text-base">
+                        @{entry.username}
                       </span>
-                    )}
-                    {isWeeklyChampion && (
-                      <span className="rounded-full border border-amber-400/35 bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
-                        👑 #1
-                      </span>
-                    )}
-                    {entry.current_streak > 0 && (
-                      <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold text-orange-300 tabular-nums">
-                        🔥 {entry.current_streak}d
-                      </span>
-                    )}
-                    {entry.unlocked_badges.length > 0 && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[11px]">
-                        {entry.unlocked_badges.map((b) => (
-                          <span
-                            key={b.id}
-                            title={`${b.title} — ${b.description}`}
-                          >
-                            {b.icon}
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                  </div>
+                      {entry.is_self && (
+                        <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/90">
+                          You
+                        </span>
+                      )}
+                      {isWeeklyChampion && (
+                        <span className="rounded-full border border-amber-400/35 bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                          👑 #1
+                        </span>
+                      )}
+                      {entry.current_streak > 0 && (
+                        <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold text-orange-300 tabular-nums">
+                          🔥 {entry.current_streak}d
+                        </span>
+                      )}
+                      {entry.unlocked_badges.length > 0 && (
+                        <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[11px]">
+                          {entry.unlocked_badges.map((b) => (
+                            <span
+                              key={b.id}
+                              title={`${b.title} — ${b.description}`}
+                            >
+                              {b.icon}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                      <ProfileEffectPill effectId={entry.active_effect} />
+                    </div>
 
                   {isStudyingNow && entry.studying_started_at && (
                     <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300 tabular-nums">
@@ -1466,6 +1581,7 @@ export default function FriendsPage() {
               ))
             )}
           </div>
+          </div>
         </div>
       );
     });
@@ -1542,19 +1658,30 @@ export default function FriendsPage() {
       {activeTab === "friends" ? (
         <>
           {/* YOUR PROFILE & USERNAME CARD */}
-          <section className="mt-5 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:mt-7 sm:p-5">
+          <section
+            className={`relative mt-5 overflow-hidden rounded-2xl border bg-[#111113] p-4 sm:mt-7 sm:p-5 ${
+              myActiveEffect ? myActiveEffect.borderClass : "border-white/[0.08]"
+            }`}
+          >
+            <ProfileEffectOverlay effectId={myActiveEffect?.id ?? null} />
+
+            <div className="relative z-10">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3.5">
                 <UserAvatar
                   avatarUrl={myAvatarUrl}
                   name={myUsername || "you"}
                   size="md"
+                  effectId={myActiveEffect?.id ?? null}
                 />
 
                 <div>
-                  <p className="text-[11px] font-medium text-white/45">
-                    Your profile
-                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="text-[11px] font-medium text-white/45">
+                      Your profile
+                    </p>
+                    <ProfileEffectPill effectId={myActiveEffect?.id ?? null} />
+                  </div>
                   {myUsername && !isEditingUsername ? (
                     <p className="font-mono text-base font-bold sm:text-lg">
                       @{myUsername}
@@ -1567,7 +1694,7 @@ export default function FriendsPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   ref={avatarFileInputRef}
                   type="file"
@@ -1575,6 +1702,14 @@ export default function FriendsPage() {
                   onChange={handleAvatarUpload}
                   className="hidden"
                 />
+
+                <button
+                  type="button"
+                  onClick={() => setIsEffectPickerOpen(true)}
+                  className="h-9 rounded-xl border border-white/15 bg-[#09090b]/80 px-3 text-xs font-medium text-white/90 transition hover:border-white/30 hover:bg-white/5"
+                >
+                  ✨ Profile Effect
+                </button>
 
                 <button
                   type="button"
@@ -1652,6 +1787,7 @@ export default function FriendsPage() {
             {usernameMessage && (
               <p className="mt-2.5 text-xs text-white/70">{usernameMessage}</p>
             )}
+            </div>
           </section>
 
           {/* INCOMING & OUTGOING REQUESTS */}
@@ -1833,17 +1969,22 @@ export default function FriendsPage() {
               scopeLabel="Friends #1 Today"
               champion={
                 friendsDailyChampion
-                  ? {
-                      username: friendsDailyChampion.username,
-                      avatarUrl: friendsDailyChampion.avatar_url,
-                      isSelf: friendsDailyChampion.is_self,
-                      scoreLabel: formatDuration(
-                        friendsDailyChampion.today_seconds
-                      ),
-                      quote: parseDailyProfileQuote(
+                  ? (() => {
+                      const parsedQuote = parseDailyChampionQuote(
                         friendsDailyChampion.champion_quote
-                      ),
-                    }
+                      );
+                      return {
+                        username: friendsDailyChampion.username,
+                        avatarUrl: friendsDailyChampion.avatar_url,
+                        effectId: friendsDailyChampion.active_effect,
+                        isSelf: friendsDailyChampion.is_self,
+                        scoreLabel: formatDuration(
+                          friendsDailyChampion.today_seconds
+                        ),
+                        quote: parsedQuote.text,
+                        imageUrl: parsedQuote.imageUrl,
+                      };
+                    })()
                   : null
               }
               onSaveQuote={handleSaveFriendsQuote}
@@ -2105,22 +2246,30 @@ export default function FriendsPage() {
                       scopeLabel="Group #1 Today"
                       champion={
                         groupDailyChampion
-                          ? {
-                              username: groupDailyChampion.username,
-                              avatarUrl: groupDailyChampion.avatar_url,
-                              isSelf: groupDailyChampion.is_self,
-                              scoreLabel: formatDuration(
-                                groupDailyChampion.today_seconds
-                              ),
-                              quote:
+                          ? (() => {
+                              const isAuthorsQuoteToday =
                                 selectedGroup.champion_quote_author_id ===
                                   groupDailyChampion.user_id &&
                                 isTodayIso(
                                   selectedGroup.champion_quote_updated_at
-                                )
-                                  ? selectedGroup.champion_quote
-                                  : null,
-                            }
+                                );
+                              const parsedQuote = isAuthorsQuoteToday
+                                ? parseDailyChampionQuote(
+                                    selectedGroup.champion_quote
+                                  )
+                                : { text: null, imageUrl: null };
+                              return {
+                                username: groupDailyChampion.username,
+                                avatarUrl: groupDailyChampion.avatar_url,
+                                effectId: groupDailyChampion.active_effect,
+                                isSelf: groupDailyChampion.is_self,
+                                scoreLabel: formatDuration(
+                                  groupDailyChampion.today_seconds
+                                ),
+                                quote: parsedQuote.text,
+                                imageUrl: parsedQuote.imageUrl,
+                              };
+                            })()
                           : null
                       }
                       onSaveQuote={(q) =>
@@ -2187,6 +2336,37 @@ export default function FriendsPage() {
           )}
         </section>
       )}
+
+      <ProfileEffectPicker
+        mode="modal"
+        open={isEffectPickerOpen}
+        onClose={() => setIsEffectPickerOpen(false)}
+        userId={currentUserId}
+        username={myUsername}
+        avatarUrl={myAvatarUrl}
+        achievements={myAchievements}
+        preference={myEffectPref}
+        onPreferenceChange={(nextPref, resolvedEffectId) => {
+          setMyEffectPref(nextPref);
+          if (currentUserId) {
+            setCachedProfileLookup((prev) => {
+              const existing = prev[currentUserId];
+              if (!existing) return prev;
+              return {
+                ...prev,
+                [currentUserId]: { ...existing, profileEffect: nextPref },
+              };
+            });
+            setLeaderboard((prev) =>
+              prev.map((entry) =>
+                entry.is_self
+                  ? { ...entry, active_effect: resolvedEffectId }
+                  : entry
+              )
+            );
+          }
+        }}
+      />
     </main>
   );
 }

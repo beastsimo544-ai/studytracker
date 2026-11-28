@@ -4,8 +4,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useNotifications } from "@/components/notification-provider";
+import ProfileEffectPicker from "@/components/profile-effect-picker";
 import UserAvatar from "@/components/user-avatar";
+import {
+  evaluateAchievements,
+  type Achievement,
+  type SessionForAchievements,
+} from "@/lib/achievements";
 import { notifyAvatarUpdated, resizeAvatarFile } from "@/lib/avatar";
+import {
+  loadLocalProfileEffectPref,
+  parseProfileEffectPreference,
+  resolveActiveProfileEffect,
+  saveResolvedActiveEffectId,
+  type ProfileEffectPreference,
+} from "@/lib/profile-effects";
 import { exportSessionsToCsv, type CsvSessionRow } from "@/lib/csv-export";
 import {
   DEFAULT_NOTIFICATION_PREFS,
@@ -30,6 +43,10 @@ export default function SettingsPage() {
   const [hasProfileRow, setHasProfileRow] = useState(false);
   const [avatarMessage, setAvatarMessage] = useState("");
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const [achievements, setAchievements] = useState<Achievement[]>(() =>
+    evaluateAchievements([])
+  );
+  const [effectPref, setEffectPref] = useState<ProfileEffectPreference>("auto");
   const [isLoading, setIsLoading] = useState(true);
 
   // Notification preferences
@@ -74,28 +91,90 @@ export default function SettingsPage() {
       setNotifPrefs(loadNotificationPrefs());
       setNotifPermission(await getNotificationPermissionState());
 
-      const fullRes = await supabase
-        .from("profiles")
-        .select("username, avatar_url")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (fullRes.error && fullRes.error.message.includes("avatar_url")) {
-        const fallbackRes = await supabase
+      const [fullRes, sessionsRes] = await Promise.all([
+        supabase
           .from("profiles")
-          .select("username")
+          .select("username, avatar_url, profile_effect")
           .eq("user_id", user.id)
-          .maybeSingle();
+          .maybeSingle(),
+        supabase
+          .from("study_sessions")
+          .select("duration, created_at")
+          .eq("user_id", user.id),
+      ]);
 
-        if (fallbackRes.data) {
-          setHasProfileRow(true);
-          setUsername(fallbackRes.data.username ?? null);
+      const evaluated = evaluateAchievements(
+        (sessionsRes.data || []) as SessionForAchievements[]
+      );
+      setAchievements(evaluated);
+
+      let profileUsername: string | null = null;
+      let profileAvatar: string | null = null;
+      let profileEffectRaw: string | null = null;
+      let foundProfile = false;
+
+      if (fullRes.error) {
+        if (fullRes.error.message.includes("profile_effect")) {
+          const avatarRes = await supabase
+            .from("profiles")
+            .select("username, avatar_url")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (
+            avatarRes.error &&
+            avatarRes.error.message.includes("avatar_url")
+          ) {
+            const fallbackRes = await supabase
+              .from("profiles")
+              .select("username")
+              .eq("user_id", user.id)
+              .maybeSingle();
+
+            if (fallbackRes.data) {
+              foundProfile = true;
+              profileUsername = fallbackRes.data.username ?? null;
+            }
+          } else if (avatarRes.data) {
+            foundProfile = true;
+            profileUsername = avatarRes.data.username ?? null;
+            profileAvatar = avatarRes.data.avatar_url ?? null;
+          }
+        } else if (fullRes.error.message.includes("avatar_url")) {
+          const fallbackRes = await supabase
+            .from("profiles")
+            .select("username")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (fallbackRes.data) {
+            foundProfile = true;
+            profileUsername = fallbackRes.data.username ?? null;
+          }
         }
       } else if (fullRes.data) {
-        setHasProfileRow(true);
-        setUsername(fullRes.data.username ?? null);
-        setAvatarUrl(fullRes.data.avatar_url ?? null);
+        foundProfile = true;
+        profileUsername = fullRes.data.username ?? null;
+        profileAvatar = fullRes.data.avatar_url ?? null;
+        profileEffectRaw = fullRes.data.profile_effect ?? null;
       }
+
+      if (foundProfile) {
+        setHasProfileRow(true);
+        setUsername(profileUsername);
+        setAvatarUrl(profileAvatar);
+      }
+
+      const resolvedPref = profileEffectRaw
+        ? parseProfileEffectPreference(profileEffectRaw)
+        : loadLocalProfileEffectPref();
+      setEffectPref(resolvedPref);
+
+      const resolvedEffect = resolveActiveProfileEffect(
+        resolvedPref,
+        evaluated.filter((a) => a.unlocked).map((a) => a.id)
+      );
+      saveResolvedActiveEffectId(resolvedEffect?.id ?? null);
 
       setIsLoading(false);
     };
@@ -349,6 +428,11 @@ export default function SettingsPage() {
     );
   }
 
+  const activeProfileEffect = resolveActiveProfileEffect(
+    effectPref,
+    achievements.filter((a) => a.unlocked).map((a) => a.id)
+  );
+
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6 sm:py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -393,6 +477,7 @@ export default function SettingsPage() {
             avatarUrl={avatarUrl}
             name={username || email}
             size="lg"
+            effectId={activeProfileEffect?.id ?? null}
             className="!h-14 !w-14 !text-lg"
           />
 
@@ -464,6 +549,27 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* PROFILE EFFECTS (UNLOCKED BY ACHIEVEMENTS) */}
+      <section className="mt-4 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
+        <div className="mb-4">
+          <h2 className="text-base font-semibold">Profile Effects ✨</h2>
+          <p className="mt-0.5 text-xs text-white/50">
+            Animated Discord-style profile effects unlocked from your study
+            achievements, shown on Friends &amp; Group leaderboards.
+          </p>
+        </div>
+
+        <ProfileEffectPicker
+          mode="inline"
+          userId={userId}
+          username={username || email.split("@")[0] || "student"}
+          avatarUrl={avatarUrl}
+          achievements={achievements}
+          preference={effectPref}
+          onPreferenceChange={(nextPref) => setEffectPref(nextPref)}
+        />
       </section>
 
       {/* NOTIFICATIONS & REMINDERS */}

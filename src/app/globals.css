@@ -64,3 +64,155 @@ textarea {
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* Discord-style Animated Profile Effects */
+@keyframes st-float-up {
+  0% {
+    transform: translate3d(0, 14px, 0) scale(0.75);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.65;
+  }
+  100% {
+    transform: translate3d(var(--st-drift, 6px), -96px, 0) scale(1.1);
+    opacity: 0;
+  }
+}
+
+@keyframes st-twinkle {
+  0%,
+  100% {
+    transform: scale(0.55) rotate(0deg);
+    opacity: 0.25;
+  }
+  50% {
+    transform: scale(1.18) rotate(22deg);
+    opacity: 1;
+  }
+}
+
+@keyframes st-aurora-shift {
+  0% {
+    transform: translate3d(-12%, -6%, 0) rotate(-6deg) scale(1);
+    opacity: 0.52;
+  }
+  50% {
+    transform: translate3d(10%, 6%, 0) rotate(5deg) scale(1.08);
+    opacity: 0.82;
+  }
+  100% {
+    transform: translate3d(-12%, -6%, 0) rotate(-6deg) scale(1);
+    opacity: 0.52;
+  }
+}
+
+@keyframes st-shimmer-sweep {
+  0% {
+    transform: translate3d(-140%, 0, 0) skewX(-20deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.65;
+  }
+  65% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(240%, 0, 0) skewX(-20deg);
+    opacity: 0;
+  }
+}
+
+@keyframes st-volt-pulse {
+  0%,
+  100% {
+    opacity: 0.22;
+  }
+  18% {
+    opacity: 0.95;
+  }
+  24% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 0.85;
+  }
+  65% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes st-ring-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes st-aura-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.03);
+  }
+}
+
+.st-effect-float-up {
+  animation: st-float-up var(--st-dur, 4.2s) ease-in-out var(--st-delay, 0s)
+    infinite;
+  will-change: transform, opacity;
+}
+
+.st-effect-twinkle {
+  animation: st-twinkle var(--st-dur, 2.8s) ease-in-out var(--st-delay, 0s)
+    infinite;
+  will-change: transform, opacity;
+}
+
+.st-effect-aurora {
+  animation: st-aurora-shift 9s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.st-effect-shimmer {
+  animation: st-shimmer-sweep var(--st-dur, 4.6s) ease-in-out
+    var(--st-delay, 0s) infinite;
+  will-change: transform, opacity;
+}
+
+.st-effect-volt {
+  animation: st-volt-pulse 3.4s ease-in-out infinite;
+  will-change: opacity;
+}
+
+.st-effect-ring-spin {
+  animation: st-ring-spin 5.5s linear infinite;
+  will-change: transform;
+}
+
+.st-effect-breathe {
+  animation: st-aura-breathe 4.4s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-effect-float-up,
+  .st-effect-twinkle,
+  .st-effect-aurora,
+  .st-effect-shimmer,
+  .st-effect-volt,
+  .st-effect-ring-spin,
+  .st-effect-breathe {
+    animation: none !important;
+  }
+}

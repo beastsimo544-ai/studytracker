@@ -7,6 +7,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useNotifications } from "@/components/notification-provider";
 import UserAvatar from "@/components/user-avatar";
+import {
+  loadResolvedActiveEffectId,
+  type ProfileEffectId,
+} from "@/lib/profile-effects";
 import { supabase } from "@/lib/supabase";
 
 function formatRelativeTime(iso: string) {
@@ -37,6 +41,7 @@ export default function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isNativeApp, setIsNativeApp] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [effectId, setEffectId] = useState<ProfileEffectId | null>(null);
   const [displayName, setDisplayName] = useState<string>("?");
   const [bellOpen, setBellOpen] = useState(false);
   const bellContainerRef = useRef<HTMLDivElement | null>(null);
@@ -81,9 +86,11 @@ export default function Navbar() {
 
       setIsLoggedIn(!!user);
       if (user) {
+        setEffectId(loadResolvedActiveEffectId());
         await loadProfileBadge(user.id, user.email);
       } else {
         setAvatarUrl(null);
+        setEffectId(null);
       }
     };
 
@@ -95,9 +102,11 @@ export default function Navbar() {
       const user = session?.user;
       setIsLoggedIn(!!user);
       if (user) {
+        setEffectId(loadResolvedActiveEffectId());
         loadProfileBadge(user.id, user.email);
       } else {
         setAvatarUrl(null);
+        setEffectId(null);
       }
     });
 
@@ -106,11 +115,20 @@ export default function Navbar() {
       setAvatarUrl(custom.detail?.avatarUrl ?? null);
     };
 
+    const handleEffectUpdated = (event: Event) => {
+      const custom = event as CustomEvent<{
+        resolvedEffectId?: ProfileEffectId | null;
+      }>;
+      setEffectId(custom.detail?.resolvedEffectId ?? null);
+    };
+
     window.addEventListener("profile-avatar-updated", handleAvatarUpdated);
+    window.addEventListener("profile-effect-updated", handleEffectUpdated);
 
     return () => {
       subscription.unsubscribe();
       window.removeEventListener("profile-avatar-updated", handleAvatarUpdated);
+      window.removeEventListener("profile-effect-updated", handleEffectUpdated);
     };
   }, []);
 
@@ -407,6 +425,7 @@ export default function Navbar() {
                     avatarUrl={avatarUrl}
                     name={displayName}
                     size="xs"
+                    effectId={effectId}
                     className="!h-5 !w-5 !text-[10px]"
                   />
                   <span>Settings</span>
@@ -468,6 +487,7 @@ export default function Navbar() {
                     avatarUrl={avatarUrl}
                     name={displayName}
                     size="xs"
+                    effectId={effectId}
                     className="!h-7 !w-7"
                   />
                 </Link>

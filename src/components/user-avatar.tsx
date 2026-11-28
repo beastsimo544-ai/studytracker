@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  getProfileEffectById,
+  type ProfileEffectId,
+} from "@/lib/profile-effects";
+
 type AvatarSize = "xs" | "sm" | "md" | "lg";
 
 type UserAvatarProps = {
@@ -7,6 +12,7 @@ type UserAvatarProps = {
   name?: string | null;
   size?: AvatarSize;
   className?: string;
+  effectId?: ProfileEffectId | null;
 };
 
 const SIZE_CLASSES: Record<AvatarSize, string> = {
@@ -38,30 +44,50 @@ export default function UserAvatar({
   name,
   size = "md",
   className = "",
+  effectId = null,
 }: UserAvatarProps) {
   const cleanName = (name || "?").replace(/^@+/, "").trim();
   const initial = (cleanName[0] || "?").toUpperCase();
   const sizeClass = SIZE_CLASSES[size];
+  const effect = getProfileEffectById(effectId);
 
-  if (avatarUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={avatarUrl}
-        alt={cleanName ? `${cleanName} avatar` : "User avatar"}
-        className={`${sizeClass} shrink-0 rounded-full border border-white/15 object-cover ${className}`}
-      />
-    );
-  }
+  const innerBorderClass = effect
+    ? "ring-2 ring-[#111113]"
+    : "border border-white/15";
 
-  const palette = getPalette(cleanName.toLowerCase());
-
-  return (
+  const avatarNode = avatarUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={avatarUrl}
+      alt={cleanName ? `${cleanName} avatar` : "User avatar"}
+      className={`${sizeClass} relative z-10 shrink-0 rounded-full object-cover ${innerBorderClass} ${className}`}
+    />
+  ) : (
     <div
       aria-hidden="true"
-      className={`${sizeClass} flex shrink-0 select-none items-center justify-center rounded-full border border-white/15 bg-gradient-to-br font-semibold ${palette} ${className}`}
+      className={`${sizeClass} relative z-10 flex shrink-0 select-none items-center justify-center rounded-full bg-gradient-to-br font-semibold ${innerBorderClass} ${getPalette(cleanName.toLowerCase())} ${className}`}
     >
       {initial}
     </div>
+  );
+
+  if (!effect) {
+    return avatarNode;
+  }
+
+  return (
+    <span
+      className="relative inline-flex shrink-0 items-center justify-center rounded-full p-[2px]"
+      style={{
+        boxShadow: `0 0 14px ${effect.glowRgba}`,
+      }}
+    >
+      <span
+        aria-hidden="true"
+        className="st-effect-ring-spin pointer-events-none absolute inset-0 rounded-full"
+        style={{ background: effect.ringGradient }}
+      />
+      {avatarNode}
+    </span>
   );
 }
