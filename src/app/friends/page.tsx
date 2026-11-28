@@ -1468,28 +1468,25 @@ export default function FriendsPage() {
           <div className="relative z-10 p-4 sm:p-5">
             {/* Top Row: Identity + Desktop Stats + Actions */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span
-                    className={`inline-flex h-7 min-w-8 shrink-0 items-center justify-center rounded-lg border px-1.5 font-mono text-xs font-bold tabular-nums ${rankBadgeClass}`}
-                  >
-                    #{rank}
-                  </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+                    <span
+                      className={`inline-flex h-7 min-w-8 shrink-0 items-center justify-center rounded-lg border px-1.5 font-mono text-xs font-bold tabular-nums ${rankBadgeClass}`}
+                    >
+                      #{rank}
+                    </span>
 
-                  <Link
-                    href={profileHref}
-                    className="group flex min-w-0 items-center gap-3"
-                  >
-                    <UserAvatar
-                      avatarUrl={entry.avatar_url}
-                      name={entry.username}
-                      size="sm"
-                      effectId={entry.active_effect}
-                    />
-                  </Link>
+                    <Link href={profileHref} className="shrink-0">
+                      <UserAvatar
+                        avatarUrl={entry.avatar_url}
+                        name={entry.username}
+                        size="sm"
+                        effectId={entry.active_effect}
+                      />
+                    </Link>
 
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex min-w-0 items-center gap-1.5">
                       <Link
                         href={profileHref}
                         className="truncate font-mono text-sm font-bold text-white transition hover:underline sm:text-base"
@@ -1497,60 +1494,67 @@ export default function FriendsPage() {
                         @{entry.username}
                       </Link>
                       {entry.is_self && (
-                        <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/90">
+                        <span className="shrink-0 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/90">
                           You
                         </span>
                       )}
-                      {isWeeklyChampion && (
-                        <span className="rounded-full border border-amber-400/35 bg-amber-400/12 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
-                          Top Today
-                        </span>
-                      )}
-                      {entry.current_streak > 0 && (
-                        <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-white/75 tabular-nums">
-                          {entry.current_streak}d streak
-                        </span>
-                      )}
-                      <ProfileEffectPill effectId={entry.active_effect} />
                     </div>
+                  </div>
 
-                  {isStudyingNow && entry.studying_started_at && (
-                    <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300 tabular-nums">
-                      <span className="relative flex h-1.5 w-1.5">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      </span>
-                      <span className="truncate">
-                        Studying <strong>{entry.studying_subject}</strong> ·{" "}
-                        {formatLiveElapsed(entry.studying_started_at, nowMs)}
-                      </span>
-                    </div>
-                  )}
+                  <div className="flex shrink-0 items-center gap-1.5 sm:hidden">
+                    <Link
+                      href={profileHref}
+                      className="rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/80 transition hover:border-white/25 hover:text-white"
+                    >
+                      Profile
+                    </Link>
+                    {relation && (
+                      <button
+                        onClick={() =>
+                          removeFriendship(
+                            relation.id,
+                            `Remove @${entry.username} from your friends?`
+                          )
+                        }
+                        className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/45 transition hover:border-red-500/30 hover:text-red-400"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex shrink-0 items-center gap-1.5 sm:hidden">
-                <Link
-                  href={profileHref}
-                  className="rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/80 transition hover:border-white/25 hover:text-white"
-                >
-                  Profile
-                </Link>
-                {relation && (
-                  <button
-                    onClick={() =>
-                      removeFriendship(
-                        relation.id,
-                        `Remove @${entry.username} from your friends?`
-                      )
-                    }
-                    className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/45 transition hover:border-red-500/30 hover:text-red-400"
-                  >
-                    Remove
-                  </button>
+                {(isWeeklyChampion ||
+                  entry.current_streak > 0 ||
+                  (!effectsDisabled && Boolean(cardEffect)) ||
+                  (isStudyingNow && Boolean(entry.studying_started_at))) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:mt-1.5 sm:pl-[92px]">
+                    {isWeeklyChampion && (
+                      <span className="rounded-full border border-amber-400/35 bg-amber-400/12 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                        Top Today
+                      </span>
+                    )}
+                    {entry.current_streak > 0 && (
+                      <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-white/75 tabular-nums">
+                        {entry.current_streak}d streak
+                      </span>
+                    )}
+                    <ProfileEffectPill effectId={entry.active_effect} />
+                    {isStudyingNow && entry.studying_started_at && (
+                      <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300 tabular-nums">
+                        <span className="relative flex h-1.5 w-1.5 shrink-0">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                        </span>
+                        <span className="truncate">
+                          Studying <strong>{entry.studying_subject}</strong> ·{" "}
+                          {formatLiveElapsed(entry.studying_started_at, nowMs)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
 
             {/* Symmetrical 50/50 Grid on Mobile, Compact Pair on Desktop */}
             <div className="flex items-center gap-2.5">

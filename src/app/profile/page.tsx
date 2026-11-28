@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import MonthlyStudyTrendChart from "@/components/monthly-study-trend-chart";
 import { useNotifications } from "@/components/notification-provider";
 import ProfileEffectOverlay, {
   ProfileEffectPill,
@@ -874,56 +875,62 @@ function ProfilePageContent() {
 
           {/* WEEKLY CHART & STUDY CALENDAR */}
           <section className="mt-5 grid gap-5 sm:mt-6 lg:grid-cols-2">
-            <div className="rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
-              <h2 className="text-base font-semibold sm:text-lg">
-                Study this week
-              </h2>
+            <div className="flex flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
+              <div>
+                <h2 className="text-base font-semibold sm:text-lg">
+                  Study this week
+                </h2>
 
-              <div className="mt-4 flex h-48 items-end justify-between gap-1.5 sm:h-56 sm:gap-3">
-                {statsSnapshot.weekData.map(
-                  ({ day: dayLabel, seconds, segments }) => {
-                    const height =
-                      (seconds / statsSnapshot.maxDaySeconds) * 100;
+                <div className="mt-4 flex h-40 items-end justify-between gap-1.5 sm:h-44 sm:gap-3">
+                  {statsSnapshot.weekData.map(
+                    ({ day: dayLabel, seconds, segments }) => {
+                      const height =
+                        (seconds / statsSnapshot.maxDaySeconds) * 100;
 
-                    return (
-                      <div
-                        key={dayLabel}
-                        className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2"
-                      >
-                        <p className="truncate text-[10px] text-white/65 tabular-nums sm:text-xs">
-                          {seconds > 0 ? formatCompact(seconds) : "0m"}
-                        </p>
+                      return (
+                        <div
+                          key={dayLabel}
+                          className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2"
+                        >
+                          <p className="truncate text-[10px] text-white/65 tabular-nums sm:text-xs">
+                            {seconds > 0 ? formatCompact(seconds) : "0m"}
+                          </p>
 
-                        {seconds > 0 ? (
-                          <div
-                            className="flex w-full max-w-7 flex-col overflow-hidden rounded-t-md sm:max-w-9"
-                            style={{ height: `${Math.max(height, 6)}%` }}
-                          >
-                            {segments.map((seg) => (
-                              <div
-                                key={seg.subject}
-                                title={`${seg.subject}: ${formatDuration(seg.seconds)}`}
-                                style={{
-                                  height: `${(seg.seconds / seconds) * 100}%`,
-                                  backgroundColor: seg.color,
-                                }}
-                              />
-                            ))}
-                          </div>
-                        ) : (
-                          <div
-                            className="w-full max-w-7 rounded-t-md bg-white/12 sm:max-w-9"
-                            style={{ height: "2px" }}
-                          />
-                        )}
+                          {seconds > 0 ? (
+                            <div
+                              className="flex w-full max-w-7 flex-col overflow-hidden rounded-t-md sm:max-w-9"
+                              style={{ height: `${Math.max(height, 6)}%` }}
+                            >
+                              {segments.map((seg) => (
+                                <div
+                                  key={seg.subject}
+                                  title={`${seg.subject}: ${formatDuration(seg.seconds)}`}
+                                  style={{
+                                    height: `${(seg.seconds / seconds) * 100}%`,
+                                    backgroundColor: seg.color,
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <div
+                              className="w-full max-w-7 rounded-t-md bg-white/12 sm:max-w-9"
+                              style={{ height: "2px" }}
+                            />
+                          )}
 
-                        <span className="text-[11px] text-white/45 sm:text-xs">
-                          {dayLabel}
-                        </span>
-                      </div>
-                    );
-                  }
-                )}
+                          <span className="text-[11px] text-white/45 sm:text-xs">
+                            {dayLabel}
+                          </span>
+                        </div>
+                      );
+                    }
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-5 border-t border-white/[0.07] pt-4">
+                <MonthlyStudyTrendChart sessions={sessions} />
               </div>
             </div>
 
