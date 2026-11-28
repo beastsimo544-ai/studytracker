@@ -9,6 +9,7 @@ import ProfileEffectPicker from "@/components/profile-effect-picker";
 import ScreenTimeCard from "@/components/screen-time-card";
 import StudyCardModal from "@/components/study-card-modal";
 import StudyHeatmap from "@/components/study-heatmap";
+import StudyHoursByDayChart from "@/components/study-hours-by-day-chart";
 import { evaluateAchievements } from "@/lib/achievements";
 import {
   getProfileEffectsForAchievement,
@@ -1111,6 +1112,8 @@ export default function Dashboard() {
       </section>
 
       <StudyHeatmap sessions={sessions} dailyGoalMinutes={dailyGoalMinutes} />
+
+      <StudyHoursByDayChart sessions={sessions} />
 
       {/* COLOR-CODED STUDY BY SUBJECT */}
       <section className="mt-6 sm:mt-8">

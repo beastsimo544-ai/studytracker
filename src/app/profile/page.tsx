@@ -10,6 +10,7 @@ import ProfileEffectOverlay, {
 } from "@/components/profile-effect-overlay";
 import ProfileEffectPicker from "@/components/profile-effect-picker";
 import StudyHeatmap from "@/components/study-heatmap";
+import StudyHoursByDayChart from "@/components/study-hours-by-day-chart";
 import { useEffectsDisabled } from "@/components/use-effects-disabled";
 import UserAvatar from "@/components/user-avatar";
 import { evaluateAchievements } from "@/lib/achievements";
@@ -1020,6 +1021,9 @@ function ProfilePageContent() {
             sessions={sessions}
             dailyGoalMinutes={dailyGoalMinutes}
           />
+
+          {/* 24-HOUR STUDY DISTRIBUTION */}
+          <StudyHoursByDayChart sessions={sessions} />
         </>
       )}
 
