@@ -205,12 +205,12 @@ export default function ChampionQuoteBanner({
               {imageDraft && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-[#09090b] p-2.5">
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-white/15 bg-[#111113]">
+                    <div className="inline-flex w-fit shrink-0 overflow-hidden rounded-lg border border-white/15 bg-[#111113]">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={imageDraft}
                         alt="Temporary quote attachment preview"
-                        className="h-full w-full object-contain"
+                        className="block h-14 w-auto max-w-28"
                       />
                     </div>
                     <div className="min-w-0">
@@ -285,29 +285,24 @@ export default function ChampionQuoteBanner({
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setLightboxOpen(true)}
-                  aria-label={`View full photo by @${champion.username}`}
-                  className="group relative h-40 w-full shrink-0 overflow-hidden rounded-xl border border-white/15 bg-[#09090b] shadow-lg ring-1 ring-amber-400/20 transition hover:border-amber-300/60 sm:h-28 sm:w-40"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={champion.imageUrl}
-                    alt=""
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-lg"
-                  />
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={champion.imageUrl}
-                    alt={`Temporary spotlight photo by @${champion.username}`}
-                    className="relative z-10 h-full w-full object-contain transition duration-200 group-hover:scale-[1.03]"
-                  />
-                  <span className="pointer-events-none absolute bottom-1.5 right-1.5 z-20 rounded-md border border-white/20 bg-black/70 px-1.5 py-0.5 text-[9px] font-medium text-amber-200 backdrop-blur-sm">
-                    ↗ Expand
-                  </span>
-                </button>
+                <div className="flex justify-center sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setLightboxOpen(true)}
+                    aria-label={`View full photo by @${champion.username}`}
+                    className="group relative w-fit max-w-full overflow-hidden rounded-xl border border-white/15 bg-[#09090b] shadow-lg ring-1 ring-amber-400/20 transition hover:border-amber-300/60"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={champion.imageUrl}
+                      alt={`Temporary spotlight photo by @${champion.username}`}
+                      className="block max-h-48 w-auto max-w-full transition duration-200 group-hover:scale-[1.02] sm:max-h-32 sm:max-w-[220px]"
+                    />
+                    <span className="pointer-events-none absolute bottom-1.5 right-1.5 z-20 rounded-md border border-white/20 bg-black/70 px-1.5 py-0.5 text-[9px] font-medium text-amber-200 backdrop-blur-sm">
+                      ↗ Expand
+                    </span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="mt-3.5 border-l-2 border-amber-400/55 pl-3.5">
@@ -344,12 +339,12 @@ export default function ChampionQuoteBanner({
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md overflow-hidden rounded-2xl border border-white/12 bg-[#111113] shadow-2xl"
           >
-            <div className="bg-[#09090b] p-3">
+            <div className="flex justify-center bg-[#09090b] p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={champion.imageUrl}
                 alt={`Temporary quote photo by @${champion.username}`}
-                className="mx-auto max-h-[65vh] w-full rounded-xl object-contain"
+                className="block max-h-[65vh] w-auto max-w-full rounded-xl"
               />
             </div>
 
