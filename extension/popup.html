@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StudyTracker Screen Time</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="header">
+        <div class="brand">
+          <img src="icon.png" alt="StudyTracker" class="brand-icon" />
+          <div>
+            <h1>StudyTracker</h1>
+            <p class="subtitle">Screen Time Guard</p>
+          </div>
+        </div>
+        <span id="risk-badge" class="risk-badge">Safe</span>
+      </header>
+
+      <section class="card risk-card">
+        <div class="risk-top">
+          <div>
+            <p class="muted-label">Study Impact Score</p>
+            <p id="risk-headline" class="risk-headline">Checking usage...</p>
+          </div>
+          <span id="risk-score" class="risk-score">0</span>
+        </div>
+
+        <div class="gauge-track">
+          <div id="gauge-marker" class="gauge-marker"></div>
+        </div>
+        <div class="gauge-labels">
+          <span>Safe</span>
+          <span>Moderate</span>
+          <span>Danger</span>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-box">
+            <span class="metric-label">Distracting</span>
+            <strong id="distracting-time" class="metric-value">0m</strong>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">Browser Total</span>
+            <strong id="total-time" class="metric-value">0m</strong>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">Studied Today</span>
+            <strong id="study-time" class="metric-value">0m</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>Sites Today</h2>
+          <span class="hint">Tap pill to classify</span>
+        </div>
+        <div id="sites-list" class="sites-list">
+          <p class="empty-note">Browse normally — active sites appear here.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div id="signed-out-box" class="auth-box hidden">
+          <p class="auth-title">Connect StudyTracker Account</p>
+          <p class="auth-desc">Sign in to sync PC screen time to your Dashboard.</p>
+          <form id="login-form" class="login-form">
+            <input id="email-input" type="email" placeholder="Email" required />
+            <input
+              id="password-input"
+              type="password"
+              placeholder="Password"
+              required
+            />
+            <button id="login-btn" type="submit" class="btn-primary">
+              Connect &amp; Sync
+            </button>
+          </form>
+        </div>
+
+        <div id="signed-in-box" class="auth-box hidden">
+          <div class="sync-row">
+            <div>
+              <p id="account-email" class="account-email"></p>
+              <p id="sync-status" class="sync-status">Synced</p>
+            </div>
+            <div class="sync-actions">
+              <button id="sync-btn" type="button" class="btn-secondary">
+                Sync
+              </button>
+              <button id="logout-btn" type="button" class="btn-ghost">
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p id="auth-error" class="error-text hidden"></p>
+      </section>
+
+      <footer class="footer">
+        <button id="open-dashboard-btn" type="button" class="btn-dashboard">
+          Open Dashboard ↗
+        </button>
+      </footer>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

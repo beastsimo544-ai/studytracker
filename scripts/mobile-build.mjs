@@ -3,15 +3,26 @@ import fs from "node:fs";
 import path from "node:path";
 
 const nextBin = path.resolve("node_modules/next/dist/bin/next");
-const publicApk = path.resolve("public/StudyTracker.apk");
-const stashedApk = path.resolve(".stashed-StudyTracker.apk");
 
-// Temporarily move public/StudyTracker.apk outside public/ during mobile build
-// so the Android APK does not bundle a duplicate copy of itself inside assets!
-let stashed = false;
-if (fs.existsSync(publicApk)) {
-  fs.renameSync(publicApk, stashedApk);
-  stashed = true;
+const stashTargets = [
+  {
+    src: path.resolve("public/StudyTracker.apk"),
+    stash: path.resolve(".stashed-StudyTracker.apk"),
+  },
+  {
+    src: path.resolve("public/StudyTracker-Extension.zip"),
+    stash: path.resolve(".stashed-StudyTracker-Extension.zip"),
+  },
+];
+
+// Temporarily stash large downloadable archives outside public/ during mobile build
+// so the Android APK never bundles duplicate copies inside its assets.
+const stashedItems = [];
+for (const target of stashTargets) {
+  if (fs.existsSync(target.src)) {
+    fs.renameSync(target.src, target.stash);
+    stashedItems.push(target);
+  }
 }
 
 let exitCode = 1;
@@ -25,8 +36,10 @@ try {
   });
   exitCode = result.status ?? 1;
 } finally {
-  if (stashed && fs.existsSync(stashedApk)) {
-    fs.renameSync(stashedApk, publicApk);
+  for (const target of stashedItems) {
+    if (fs.existsSync(target.stash)) {
+      fs.renameSync(target.stash, target.src);
+    }
   }
 }
 

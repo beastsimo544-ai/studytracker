@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "StudyTracker — Screen Time Guard",
+  "version": "1.0.0",
+  "description": "Tracks active browser time per site and syncs daily distraction vs. study impact to your StudyTracker Dashboard.",
+  "permissions": [
+    "tabs",
+    "idle",
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://*.supabase.co/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "StudyTracker Screen Time",
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}

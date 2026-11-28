@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useNotifications } from "@/components/notification-provider";
 import ProfileEffectPicker from "@/components/profile-effect-picker";
+import ScreenTimeCard from "@/components/screen-time-card";
 import StudyCardModal from "@/components/study-card-modal";
 import StudyHeatmap from "@/components/study-heatmap";
 import { evaluateAchievements } from "@/lib/achievements";
@@ -825,6 +826,12 @@ export default function Dashboard() {
           </p>
         </div>
       </section>
+
+      <ScreenTimeCard
+        userId={currentUserId}
+        todayStudySeconds={todaySeconds}
+        dailyGoalSeconds={dailyGoalSeconds}
+      />
 
       {/* UPCOMING EXAMS COUNTDOWN WIDGET */}
       <section className="mt-6 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:mt-8 sm:p-6">

@@ -201,6 +201,80 @@ export default function DownloadPage() {
           </li>
         </ol>
       </section>
+
+      {/* BROWSER EXTENSION DOWNLOAD */}
+      <section
+        id="extension"
+        className="mt-4 rounded-2xl border border-white/[0.08] bg-[#111113] p-5 sm:p-6"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-sky-300">
+                Browser Extension · PC &amp; Mac
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] text-white/60">
+                Chrome · Edge · Brave
+              </span>
+            </div>
+
+            <h2 className="mt-2.5 text-lg font-bold tracking-tight sm:text-xl">
+              StudyTracker Screen Time Guard
+            </h2>
+            <p className="mt-1 text-xs leading-relaxed text-white/60 sm:text-sm">
+              Automatically tracks active website screen time, alerts you when
+              distractions cut into study sessions, and syncs directly to your
+              Dashboard Green→Red risk meter.
+            </p>
+          </div>
+
+          <a
+            href="/StudyTracker-Extension.zip"
+            download="StudyTracker-Extension.zip"
+            onClick={() =>
+              toast.info(
+                "Downloading StudyTracker-Extension.zip...",
+                "Unzip it, then load unpacked in chrome://extensions."
+              )
+            }
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-xl bg-white px-4 text-xs font-semibold text-black transition hover:bg-white/90 sm:text-sm"
+          >
+            Download Extension (.zip)
+          </a>
+        </div>
+
+        <ol className="mt-4 space-y-2 border-t border-white/[0.08] pt-4 text-xs leading-relaxed text-white/75 sm:text-sm">
+          <li className="flex gap-3">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/12 text-[11px] font-bold text-white">
+              1
+            </span>
+            <span>
+              Download and extract <code>StudyTracker-Extension.zip</code> to a
+              folder on your computer.
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/12 text-[11px] font-bold text-white">
+              2
+            </span>
+            <span>
+              Open <code>chrome://extensions</code> (or{" "}
+              <code>edge://extensions</code>), enable{" "}
+              <strong>Developer mode</strong> in the top-right, click{" "}
+              <strong>Load unpacked</strong>, and select the extracted folder.
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/12 text-[11px] font-bold text-white">
+              3
+            </span>
+            <span>
+              Click the StudyTracker extension icon and sign in once to sync PC
+              sites live to your Dashboard.
+            </span>
+          </li>
+        </ol>
+      </section>
     </main>
   );
 }
