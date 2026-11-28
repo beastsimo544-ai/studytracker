@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useNotifications } from "@/components/notification-provider";
 import ProfileEffectPicker from "@/components/profile-effect-picker";
+import { useEffectsDisabled } from "@/components/use-effects-disabled";
 import UserAvatar from "@/components/user-avatar";
 import {
   evaluateAchievements,
@@ -13,8 +14,9 @@ import {
 } from "@/lib/achievements";
 import { notifyAvatarUpdated, resizeAvatarFile } from "@/lib/avatar";
 import {
-  loadLocalProfileEffectPref,
-  parseProfileEffectPreference,
+  loadLocalProfileEffectBundle,
+  notifyEffectsDisabledUpdated,
+  parseProfileEffectBundle,
   resolveActiveProfileEffect,
   saveResolvedActiveEffectId,
   type ProfileEffectPreference,
@@ -34,7 +36,8 @@ import { supabase } from "@/lib/supabase";
 export default function SettingsPage() {
   const router = useRouter();
   const { toast } = useNotifications();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const effectsDisabled = useEffectsDisabled();
+  const avatarInputId = useId();
 
   const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
@@ -47,6 +50,7 @@ export default function SettingsPage() {
     evaluateAchievements([])
   );
   const [effectPref, setEffectPref] = useState<ProfileEffectPreference>("auto");
+  const [customGifUrl, setCustomGifUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Notification preferences
@@ -165,13 +169,14 @@ export default function SettingsPage() {
         setAvatarUrl(profileAvatar);
       }
 
-      const resolvedPref = profileEffectRaw
-        ? parseProfileEffectPreference(profileEffectRaw)
-        : loadLocalProfileEffectPref();
-      setEffectPref(resolvedPref);
+      const resolvedBundle = profileEffectRaw
+        ? parseProfileEffectBundle(profileEffectRaw)
+        : loadLocalProfileEffectBundle();
+      setEffectPref(resolvedBundle.effectPref);
+      setCustomGifUrl(resolvedBundle.customGifUrl);
 
       const resolvedEffect = resolveActiveProfileEffect(
-        resolvedPref,
+        resolvedBundle.effectPref,
         evaluated.filter((a) => a.unlocked).map((a) => a.id)
       );
       saveResolvedActiveEffectId(resolvedEffect?.id ?? null);
@@ -280,8 +285,8 @@ export default function SettingsPage() {
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
+    const input = e.currentTarget;
+    const file = input.files?.[0];
     if (!file) return;
 
     try {
@@ -295,6 +300,8 @@ export default function SettingsPage() {
       setAvatarMessage(
         err instanceof Error ? err.message : "Could not process image."
       );
+    } finally {
+      input.value = "";
     }
   };
 
@@ -484,25 +491,26 @@ export default function SettingsPage() {
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <input
-                ref={fileInputRef}
+                id={avatarInputId}
                 type="file"
                 accept="image/*"
+                disabled={isSavingAvatar}
                 onChange={handleFileChange}
-                className="hidden"
+                className="sr-only"
               />
 
-              <button
-                type="button"
-                disabled={isSavingAvatar}
-                onClick={() => fileInputRef.current?.click()}
-                className="h-9 rounded-xl bg-white px-3.5 text-xs font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+              <label
+                htmlFor={avatarInputId}
+                className={`inline-flex h-9 cursor-pointer items-center rounded-xl bg-white px-3.5 text-xs font-semibold text-black transition hover:bg-white/90 ${
+                  isSavingAvatar ? "pointer-events-none opacity-50" : ""
+                }`}
               >
                 {isSavingAvatar
                   ? "Saving..."
                   : avatarUrl
                     ? "Change Photo"
                     : "Upload Photo"}
-              </button>
+              </label>
 
               {avatarUrl && (
                 <button
@@ -553,12 +561,28 @@ export default function SettingsPage() {
 
       {/* PROFILE EFFECTS (UNLOCKED BY ACHIEVEMENTS) */}
       <section className="mt-4 rounded-2xl border border-white/[0.08] bg-[#111113] p-4 sm:p-6">
-        <div className="mb-4">
-          <h2 className="text-base font-semibold">Profile Effects ✨</h2>
-          <p className="mt-0.5 text-xs text-white/50">
-            Animated Discord-style profile effects unlocked from your study
-            achievements, shown on Friends &amp; Group leaderboards.
-          </p>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold">Profile Effects ✨</h2>
+            <p className="mt-0.5 text-xs text-white/50">
+              Animated Discord-style profile effects unlocked from your study
+              achievements, shown on Friends &amp; Group leaderboards.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={effectsDisabled}
+            onClick={() => notifyEffectsDisabledUpdated(!effectsDisabled)}
+            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition ${
+              effectsDisabled
+                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                : "border-white/15 bg-[#09090b] text-white/75 hover:border-white/30 hover:text-white"
+            }`}
+          >
+            <span>{effectsDisabled ? "All Effects Off ✓" : "Disable All"}</span>
+          </button>
         </div>
 
         <ProfileEffectPicker
@@ -568,7 +592,11 @@ export default function SettingsPage() {
           avatarUrl={avatarUrl}
           achievements={achievements}
           preference={effectPref}
-          onPreferenceChange={(nextPref) => setEffectPref(nextPref)}
+          customGifUrl={customGifUrl}
+          onBundleChange={(nextBundle) => {
+            setEffectPref(nextBundle.effectPref);
+            setCustomGifUrl(nextBundle.customGifUrl);
+          }}
         />
       </section>
 

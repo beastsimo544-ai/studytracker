@@ -1,13 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import ChampionQuoteBanner from "@/components/champion-quote-banner";
+import CustomGifBanner from "@/components/custom-gif-banner";
 import { useNotifications } from "@/components/notification-provider";
 import ProfileEffectOverlay, {
   ProfileEffectPill,
 } from "@/components/profile-effect-overlay";
 import ProfileEffectPicker from "@/components/profile-effect-picker";
+import { useEffectsDisabled } from "@/components/use-effects-disabled";
 import UserAvatar from "@/components/user-avatar";
 import { evaluateAchievements, type Achievement } from "@/lib/achievements";
 import { notifyAvatarUpdated, resizeAvatarFile } from "@/lib/avatar";
@@ -18,13 +20,15 @@ import {
   type ChampionQuoteDraft,
 } from "@/lib/champion-quote";
 import {
-  getProfileEffectVisual,
-  loadLocalProfileEffectPref,
-  parseProfileEffectPreference,
+  encodeProfileEffectBundle,
+  getProfileEffectById,
+  loadLocalProfileEffectBundle,
+  notifyEffectsDisabledUpdated,
+  parseProfileEffectBundle,
   resolveActiveProfileEffect,
   saveResolvedActiveEffectId,
+  type ProfileEffectId,
   type ProfileEffectPreference,
-  type ProfileEffectValue,
 } from "@/lib/profile-effects";
 import { supabase } from "@/lib/supabase";
 
@@ -94,7 +98,8 @@ type LeaderboardEntry = {
   week_seconds: number;
   current_streak: number;
   unlocked_badges: Achievement[];
-  active_effect: ProfileEffectValue | null;
+  active_effect: ProfileEffectId | null;
+  custom_gif_url: string | null;
   studying_subject: string | null;
   studying_started_at: string | null;
   champion_quote: string | null;
@@ -235,9 +240,10 @@ function buildLeaderboardEntries(
     const unlockedBadges = evaluateAchievements(memberSessions).filter(
       (b) => b.unlocked
     );
+    const parsedEffectBundle = parseProfileEffectBundle(meta?.profileEffect);
     const activeEffect =
       resolveActiveProfileEffect(
-        meta?.profileEffect ?? "auto",
+        parsedEffectBundle.effectPref,
         unlockedBadges.map((b) => b.id)
       )?.id ?? null;
 
@@ -266,6 +272,7 @@ function buildLeaderboardEntries(
       current_streak: currentStreak,
       unlocked_badges: unlockedBadges,
       active_effect: activeEffect,
+      custom_gif_url: parsedEffectBundle.customGifUrl,
       studying_subject: activeStudyingSubject,
       studying_started_at: activeStudyingStartedAt,
       champion_quote: meta?.championQuote ?? null,
@@ -297,7 +304,8 @@ function getDailyChampion(entries: LeaderboardEntry[]) {
 export default function FriendsPage() {
   const router = useRouter();
   const { toast } = useNotifications();
-  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
+  const effectsDisabled = useEffectsDisabled();
+  const avatarInputId = useId();
 
   const [activeTab, setActiveTab] = useState<"friends" | "groups">("friends");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -348,6 +356,7 @@ export default function FriendsPage() {
   const [isSavingQuote, setIsSavingQuote] = useState(false);
   const [myEffectPref, setMyEffectPref] =
     useState<ProfileEffectPreference>("auto");
+  const [myCustomGifUrl, setMyCustomGifUrl] = useState<string | null>(null);
   const [isEffectPickerOpen, setIsEffectPickerOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -441,10 +450,11 @@ export default function FriendsPage() {
 
     let resolvedMyUsername: string | null = null;
     let resolvedMyAvatar: string | null = null;
-    const resolvedMyEffectPref = myProfile?.profile_effect
-      ? parseProfileEffectPreference(myProfile.profile_effect)
-      : loadLocalProfileEffectPref();
-    setMyEffectPref(resolvedMyEffectPref);
+    const resolvedMyBundle = myProfile?.profile_effect
+      ? parseProfileEffectBundle(myProfile.profile_effect)
+      : loadLocalProfileEffectBundle();
+    setMyEffectPref(resolvedMyBundle.effectPref);
+    setMyCustomGifUrl(resolvedMyBundle.customGifUrl);
 
     if (myProfile) {
       setHasProfileRow(true);
@@ -562,7 +572,10 @@ export default function FriendsPage() {
         studyingSubject: myProfile?.studying_subject ?? null,
         studyingStartedAt: myProfile?.studying_started_at ?? null,
         championQuote: myProfile?.champion_quote ?? null,
-        profileEffect: resolvedMyEffectPref,
+        profileEffect: encodeProfileEffectBundle(
+          resolvedMyBundle.effectPref,
+          resolvedMyBundle.customGifUrl
+        ),
       },
     };
 
@@ -745,26 +758,51 @@ export default function FriendsPage() {
     const handleEffectUpdated = (event: Event) => {
       const custom = event as CustomEvent<{
         preference?: ProfileEffectPreference;
-        resolvedEffectId?: ProfileEffectValue | null;
+        customGifUrl?: string | null;
+        resolvedEffectId?: ProfileEffectId | null;
       }>;
       const nextPref = custom.detail?.preference;
+      const hasCustomGif = Boolean(
+        custom.detail && "customGifUrl" in custom.detail
+      );
+      const nextCustomGif = hasCustomGif
+        ? (custom.detail?.customGifUrl ?? null)
+        : undefined;
       const nextEffectId = custom.detail?.resolvedEffectId ?? null;
       if (nextPref) {
         setMyEffectPref(nextPref);
+      }
+      if (hasCustomGif) {
+        setMyCustomGifUrl(nextCustomGif ?? null);
       }
       if (activeUserId) {
         const uid = activeUserId;
         setCachedProfileLookup((prev) => {
           const existing = prev[uid];
-          if (!existing || !nextPref) return prev;
+          if (!existing) return prev;
+          const prevBundle = parseProfileEffectBundle(existing.profileEffect);
           return {
             ...prev,
-            [uid]: { ...existing, profileEffect: nextPref },
+            [uid]: {
+              ...existing,
+              profileEffect: encodeProfileEffectBundle(
+                nextPref ?? prevBundle.effectPref,
+                hasCustomGif ? (nextCustomGif ?? null) : prevBundle.customGifUrl
+              ),
+            },
           };
         });
         setLeaderboard((prev) =>
           prev.map((entry) =>
-            entry.is_self ? { ...entry, active_effect: nextEffectId } : entry
+            entry.is_self
+              ? {
+                  ...entry,
+                  active_effect: nextEffectId,
+                  ...(hasCustomGif
+                    ? { custom_gif_url: nextCustomGif ?? null }
+                    : {}),
+                }
+              : entry
           )
         );
       }
@@ -886,8 +924,8 @@ export default function FriendsPage() {
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
+    const input = e.currentTarget;
+    const file = input.files?.[0];
     if (!file || !currentUserId) return;
 
     try {
@@ -930,6 +968,8 @@ export default function FriendsPage() {
       setUsernameMessage(
         err instanceof Error ? err.message : "Could not process image."
       );
+    } finally {
+      input.value = "";
     }
   };
 
@@ -1403,13 +1443,13 @@ export default function FriendsPage() {
         entry.studying_subject && entry.studying_started_at
       );
       const isWeeklyChampion = championUserId === entry.user_id;
-      const cardEffect = getProfileEffectVisual(entry.active_effect);
+      const cardEffect = getProfileEffectById(entry.active_effect);
 
       return (
         <div
           key={entry.user_id}
-          className={`relative overflow-hidden rounded-2xl border p-4 sm:p-5 ${
-            cardEffect
+          className={`relative overflow-hidden rounded-2xl border ${
+            !effectsDisabled && cardEffect
               ? `${cardEffect.borderClass} ${
                   entry.is_self ? "bg-[#151518]" : "bg-[#111113]"
                 }`
@@ -1420,7 +1460,16 @@ export default function FriendsPage() {
         >
           <ProfileEffectOverlay effectId={entry.active_effect} />
 
-          <div className="relative z-10">
+          <div className="relative z-10 flex flex-col gap-3.5 p-4 sm:flex-row sm:items-stretch sm:p-5">
+            {!effectsDisabled && entry.custom_gif_url && (
+              <CustomGifBanner
+                gifUrl={entry.custom_gif_url}
+                username={entry.username}
+                sizeClass="h-36 w-full sm:h-auto sm:w-28 md:w-32"
+              />
+            )}
+
+            <div className="min-w-0 flex-1">
             {/* Top Row: Identity + Desktop Stats + Remove */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start justify-between gap-2">
@@ -1581,6 +1630,7 @@ export default function FriendsPage() {
               ))
             )}
           </div>
+            </div>
           </div>
         </div>
       );
@@ -1628,30 +1678,47 @@ export default function FriendsPage() {
           </p>
         </div>
 
-        <div className="inline-flex h-9 shrink-0 items-center rounded-xl border border-white/10 bg-[#111113] p-1">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setActiveTab("friends")}
-            className={`h-7 rounded-lg px-3.5 text-xs font-semibold transition ${
-              activeTab === "friends"
-                ? "bg-white text-black"
-                : "text-white/60 hover:text-white"
+            role="switch"
+            aria-checked={effectsDisabled}
+            onClick={() => notifyEffectsDisabledUpdated(!effectsDisabled)}
+            title="Toggle distraction-free mode (hide all profile effects and GIF banners)"
+            className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition ${
+              effectsDisabled
+                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                : "border-white/10 bg-[#111113] text-white/75 hover:border-white/25 hover:text-white"
             }`}
           >
-            Friends
+            <span>{effectsDisabled ? "🚫 Effects Off" : "✨ Effects On"}</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("groups")}
-            className={`h-7 rounded-lg px-3.5 text-xs font-semibold transition ${
-              activeTab === "groups"
-                ? "bg-white text-black"
-                : "text-white/60 hover:text-white"
-            }`}
-          >
-            Groups{myGroups.length > 0 ? ` (${myGroups.length})` : ""}
-          </button>
+          <div className="inline-flex h-9 shrink-0 items-center rounded-xl border border-white/10 bg-[#111113] p-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("friends")}
+              className={`h-7 rounded-lg px-3.5 text-xs font-semibold transition ${
+                activeTab === "friends"
+                  ? "bg-white text-black"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              Friends
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("groups")}
+              className={`h-7 rounded-lg px-3.5 text-xs font-semibold transition ${
+                activeTab === "groups"
+                  ? "bg-white text-black"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              Groups{myGroups.length > 0 ? ` (${myGroups.length})` : ""}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1659,13 +1726,24 @@ export default function FriendsPage() {
         <>
           {/* YOUR PROFILE & USERNAME CARD */}
           <section
-            className={`relative mt-5 overflow-hidden rounded-2xl border bg-[#111113] p-4 sm:mt-7 sm:p-5 ${
-              myActiveEffect ? myActiveEffect.borderClass : "border-white/[0.08]"
+            className={`relative mt-5 overflow-hidden rounded-2xl border bg-[#111113] sm:mt-7 ${
+              !effectsDisabled && myActiveEffect
+                ? myActiveEffect.borderClass
+                : "border-white/[0.08]"
             }`}
           >
             <ProfileEffectOverlay effectId={myActiveEffect?.id ?? null} />
 
-            <div className="relative z-10">
+            <div className="relative z-10 flex flex-col gap-3.5 p-4 sm:flex-row sm:items-center sm:p-5">
+              {!effectsDisabled && myCustomGifUrl && (
+                <CustomGifBanner
+                  gifUrl={myCustomGifUrl}
+                  username={myUsername}
+                  sizeClass="h-36 w-full sm:h-28 sm:w-32"
+                />
+              )}
+
+              <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3.5">
                 <UserAvatar
@@ -1696,11 +1774,12 @@ export default function FriendsPage() {
 
               <div className="flex flex-wrap items-center gap-2">
                 <input
-                  ref={avatarFileInputRef}
+                  id={avatarInputId}
                   type="file"
                   accept="image/*"
+                  disabled={isSavingAvatar}
                   onChange={handleAvatarUpload}
-                  className="hidden"
+                  className="sr-only"
                 />
 
                 <button
@@ -1711,18 +1790,18 @@ export default function FriendsPage() {
                   ✨ Profile Effect
                 </button>
 
-                <button
-                  type="button"
-                  disabled={isSavingAvatar}
-                  onClick={() => avatarFileInputRef.current?.click()}
-                  className="h-9 rounded-xl border border-white/15 px-3 text-xs font-medium transition hover:bg-white/5 disabled:opacity-50"
+                <label
+                  htmlFor={avatarInputId}
+                  className={`inline-flex h-9 cursor-pointer items-center rounded-xl border border-white/15 px-3 text-xs font-medium transition hover:bg-white/5 ${
+                    isSavingAvatar ? "pointer-events-none opacity-50" : ""
+                  }`}
                 >
                   {isSavingAvatar
                     ? "Uploading..."
                     : myAvatarUrl
                       ? "Change photo"
                       : "Add photo"}
-                </button>
+                </label>
 
                 {myUsername && !isEditingUsername && (
                   <button
@@ -1787,6 +1866,7 @@ export default function FriendsPage() {
             {usernameMessage && (
               <p className="mt-2.5 text-xs text-white/70">{usernameMessage}</p>
             )}
+              </div>
             </div>
           </section>
 
@@ -2346,21 +2426,31 @@ export default function FriendsPage() {
         avatarUrl={myAvatarUrl}
         achievements={myAchievements}
         preference={myEffectPref}
-        onPreferenceChange={(nextPref, resolvedEffectId) => {
-          setMyEffectPref(nextPref);
+        customGifUrl={myCustomGifUrl}
+        onBundleChange={(nextBundle, resolvedEffectId) => {
+          setMyEffectPref(nextBundle.effectPref);
+          setMyCustomGifUrl(nextBundle.customGifUrl);
           if (currentUserId) {
+            const encoded = encodeProfileEffectBundle(
+              nextBundle.effectPref,
+              nextBundle.customGifUrl
+            );
             setCachedProfileLookup((prev) => {
               const existing = prev[currentUserId];
               if (!existing) return prev;
               return {
                 ...prev,
-                [currentUserId]: { ...existing, profileEffect: nextPref },
+                [currentUserId]: { ...existing, profileEffect: encoded },
               };
             });
             setLeaderboard((prev) =>
               prev.map((entry) =>
                 entry.is_self
-                  ? { ...entry, active_effect: resolvedEffectId }
+                  ? {
+                      ...entry,
+                      active_effect: resolvedEffectId,
+                      custom_gif_url: nextBundle.customGifUrl,
+                    }
                   : entry
               )
             );

@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import UserAvatar from "@/components/user-avatar";
 import {
   resizeQuoteImageFile,
   type ChampionQuoteDraft,
 } from "@/lib/champion-quote";
-import type { ProfileEffectValue } from "@/lib/profile-effects";
+import type { ProfileEffectId } from "@/lib/profile-effects";
 
 export type ChampionQuoteInfo = {
   username: string;
   avatarUrl: string | null;
-  effectId?: ProfileEffectValue | null;
+  effectId?: ProfileEffectId | null;
   isSelf: boolean;
   scoreLabel: string;
   quote: string | null;
@@ -29,7 +29,7 @@ export default function ChampionQuoteBanner({
   onSaveQuote: (draft: ChampionQuoteDraft) => Promise<boolean>;
   isSaving: boolean;
 }) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputId = useId();
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [imageDraft, setImageDraft] = useState<string | null>(null);
@@ -58,8 +58,8 @@ export default function ChampionQuoteBanner({
   }
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
+    const input = e.currentTarget;
+    const file = input.files?.[0];
     if (!file) return;
 
     setImageError("");
@@ -72,6 +72,7 @@ export default function ChampionQuoteBanner({
         err instanceof Error ? err.message : "Could not process image."
       );
     } finally {
+      input.value = "";
       setIsProcessingImage(false);
     }
   };
@@ -81,6 +82,13 @@ export default function ChampionQuoteBanner({
     if (isSaving || isProcessingImage) return;
 
     const cleanedText = draft.trim();
+    if (!cleanedText && imageDraft) {
+      setImageError(
+        "Add a short quote to post alongside your temporary photo."
+      );
+      return;
+    }
+
     const ok = await onSaveQuote({
       text: cleanedText,
       imageUrl: cleanedText ? imageDraft : null,
@@ -104,195 +112,224 @@ export default function ChampionQuoteBanner({
 
   return (
     <>
-      <div className="rounded-2xl border border-amber-400/30 bg-gradient-to-br from-amber-500/[0.10] via-[#111113] to-[#111113] p-4 sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/35 bg-amber-400/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
-              👑 {scopeLabel}
-            </span>
+      <div className="relative overflow-hidden rounded-2xl border border-amber-400/25 bg-gradient-to-br from-amber-500/[0.09] via-[#111113] to-[#0b0b0e] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.4)] sm:p-5">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/65 to-transparent"
+        />
 
-            <div className="flex items-center gap-1.5">
-              <UserAvatar
-                avatarUrl={champion.avatarUrl}
-                name={champion.username}
-                size="xs"
-                effectId={champion.effectId ?? null}
-                className="!h-5 !w-5 !text-[10px]"
-              />
-              <span className="font-mono text-xs font-semibold text-white">
-                @{champion.username}
+        <div className="relative z-10">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/35 bg-amber-400/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+                👑 {scopeLabel}
               </span>
-              <span className="text-[11px] tabular-nums text-amber-200/80">
-                · {champion.scoreLabel}
-              </span>
+
+              <div className="flex items-center gap-1.5">
+                <UserAvatar
+                  avatarUrl={champion.avatarUrl}
+                  name={champion.username}
+                  size="xs"
+                  effectId={champion.effectId ?? null}
+                  className="!h-5 !w-5 !text-[10px]"
+                />
+                <span className="font-mono text-xs font-semibold text-white">
+                  @{champion.username}
+                </span>
+                <span className="text-[11px] tabular-nums text-amber-200/80">
+                  · {champion.scoreLabel}
+                </span>
+              </div>
             </div>
-          </div>
 
-          {champion.isSelf && !isEditing && (
-            <button
-              type="button"
-              onClick={() => {
-                setDraft(champion.quote ?? "");
-                setImageDraft(champion.imageUrl ?? null);
-                setImageError("");
-                setIsEditing(true);
-              }}
-              className="h-8 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 text-xs font-semibold text-amber-200 transition hover:bg-amber-400/20"
-            >
-              {champion.quote ? "Edit Quote" : "Write Quote"}
-            </button>
-          )}
-        </div>
-
-        {champion.isSelf && isEditing ? (
-          <form onSubmit={handleSubmit} className="mt-3 space-y-2.5">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <input
-                type="text"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                maxLength={140}
-                autoFocus
-                placeholder="Drop today's quote for everyone to see..."
-                className="h-10 min-w-0 flex-1 rounded-xl border border-amber-400/25 bg-[#09090b] px-3.5 text-sm text-white placeholder:text-white/35 outline-none focus:border-amber-400/50"
-              />
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handlePhotoSelect}
-                className="hidden"
-              />
-
+            {champion.isSelf && !isEditing && (
               <button
                 type="button"
-                disabled={isProcessingImage || isSaving}
-                onClick={() => fileInputRef.current?.click()}
-                className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-amber-400/30 bg-[#09090b] px-3.5 text-xs font-semibold text-amber-200 transition hover:border-amber-400/55 hover:bg-amber-400/10 disabled:opacity-50"
+                onClick={() => {
+                  setDraft(champion.quote ?? "");
+                  setImageDraft(champion.imageUrl ?? null);
+                  setImageError("");
+                  setIsEditing(true);
+                }}
+                className="h-8 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 text-xs font-semibold text-amber-200 transition hover:bg-amber-400/20"
               >
-                <span aria-hidden="true">📷</span>
-                <span>
-                  {isProcessingImage
-                    ? "Processing..."
-                    : imageDraft
-                      ? "Change Photo"
-                      : "Add Photo"}
-                </span>
+                {champion.quote ? "Edit Quote" : "Write Quote"}
               </button>
-            </div>
+            )}
+          </div>
 
-            {imageDraft && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/20 bg-[#09090b] p-2.5">
-                <div className="flex min-w-0 items-center gap-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={imageDraft}
-                    alt="Temporary quote attachment preview"
-                    className="h-14 w-14 shrink-0 rounded-lg border border-white/10 object-cover"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-amber-200">
-                      Temporary quote photo attached
-                    </p>
-                    <p className="text-[11px] text-white/50">
-                      Auto-removes when today&apos;s quote resets or is cleared.
-                    </p>
+          {champion.isSelf && isEditing ? (
+            <form onSubmit={handleSubmit} className="mt-3.5 space-y-2.5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  type="text"
+                  value={draft}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    if (imageError) setImageError("");
+                  }}
+                  maxLength={140}
+                  autoFocus
+                  placeholder="Drop today's quote for everyone to see..."
+                  className="h-10 min-w-0 flex-1 rounded-xl border border-amber-400/25 bg-[#09090b] px-3.5 text-sm text-white placeholder:text-white/35 outline-none focus:border-amber-400/50"
+                />
+
+                <label
+                  htmlFor={fileInputId}
+                  className={`inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-amber-400/30 bg-[#09090b] px-3.5 text-xs font-semibold text-amber-200 transition hover:border-amber-400/55 hover:bg-amber-400/10 ${
+                    isProcessingImage || isSaving
+                      ? "pointer-events-none opacity-50"
+                      : ""
+                  }`}
+                >
+                  <span aria-hidden="true">📷</span>
+                  <span>
+                    {isProcessingImage
+                      ? "Processing..."
+                      : imageDraft
+                        ? "Change Photo"
+                        : "Add Photo"}
+                  </span>
+                </label>
+
+                <input
+                  id={fileInputId}
+                  type="file"
+                  accept="image/*"
+                  disabled={isProcessingImage || isSaving}
+                  onChange={handlePhotoSelect}
+                  className="sr-only"
+                />
+              </div>
+
+              {imageDraft && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-[#09090b] p-2.5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-white/15 bg-[#111113]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imageDraft}
+                        alt="Temporary quote attachment preview"
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-amber-200">
+                        Temporary quote photo ready
+                      </p>
+                      <p className="text-[11px] text-white/50">
+                        Resets automatically with today&apos;s quote.
+                      </p>
+                    </div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setImageDraft(null)}
+                    className="h-7 shrink-0 rounded-lg border border-white/12 px-2.5 text-[11px] text-white/65 transition hover:border-red-400/35 hover:text-red-300"
+                  >
+                    Remove photo
+                  </button>
+                </div>
+              )}
+
+              {imageError && (
+                <p className="text-xs text-red-400">{imageError}</p>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] tabular-nums text-white/40">
+                  {draft.trim().length}/140
+                </span>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {champion.quote && (
+                    <button
+                      type="button"
+                      disabled={isSaving || isProcessingImage}
+                      onClick={handleClearQuote}
+                      className="h-8 rounded-lg border border-red-500/25 bg-red-500/10 px-3 text-xs font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
+                    >
+                      Clear Quote
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageError("");
+                      setIsEditing(false);
+                    }}
+                    className="h-8 rounded-lg border border-white/12 px-3 text-xs text-white/70 transition hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving || isProcessingImage}
+                    className="h-8 rounded-lg bg-amber-400 px-3.5 text-xs font-semibold text-black transition hover:bg-amber-300 disabled:opacity-50"
+                  >
+                    {isSaving ? "Saving..." : "Save Quote"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          ) : champion.quote ? (
+            champion.imageUrl ? (
+              <div className="mt-3.5 grid gap-3.5 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div className="min-w-0 border-l-2 border-amber-400/55 pl-3.5">
+                  <p className="text-[15px] font-medium leading-relaxed text-white sm:text-base">
+                    &ldquo;{champion.quote}&rdquo;
+                  </p>
+                  <p className="mt-1.5 text-[11px] text-white/45">
+                    Today&apos;s #1 spotlight · Photo resets with quote
+                  </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setImageDraft(null)}
-                  className="h-7 shrink-0 rounded-lg border border-white/12 px-2.5 text-[11px] text-white/65 transition hover:border-red-400/35 hover:text-red-300"
+                  onClick={() => setLightboxOpen(true)}
+                  aria-label={`View full photo by @${champion.username}`}
+                  className="group relative h-40 w-full shrink-0 overflow-hidden rounded-xl border border-white/15 bg-[#09090b] shadow-lg ring-1 ring-amber-400/20 transition hover:border-amber-300/60 sm:h-28 sm:w-40"
                 >
-                  Remove photo
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={champion.imageUrl}
+                    alt=""
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-lg"
+                  />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={champion.imageUrl}
+                    alt={`Temporary spotlight photo by @${champion.username}`}
+                    className="relative z-10 h-full w-full object-contain transition duration-200 group-hover:scale-[1.03]"
+                  />
+                  <span className="pointer-events-none absolute bottom-1.5 right-1.5 z-20 rounded-md border border-white/20 bg-black/70 px-1.5 py-0.5 text-[9px] font-medium text-amber-200 backdrop-blur-sm">
+                    ↗ Expand
+                  </span>
                 </button>
               </div>
-            )}
-
-            {imageDraft && !draft.trim() && (
-              <p className="text-[11px] text-amber-300/85">
-                Write a short quote above — clearing the quote removes the
-                picture too.
-              </p>
-            )}
-
-            {imageError && (
-              <p className="text-xs text-red-400">{imageError}</p>
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] tabular-nums text-white/40">
-                {draft.trim().length}/140
-              </span>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {champion.quote && (
-                  <button
-                    type="button"
-                    disabled={isSaving || isProcessingImage}
-                    onClick={handleClearQuote}
-                    className="h-8 rounded-lg border border-red-500/25 bg-red-500/10 px-3 text-xs font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
-                  >
-                    Clear Quote
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setImageError("");
-                    setIsEditing(false);
-                  }}
-                  className="h-8 rounded-lg border border-white/12 px-3 text-xs text-white/70 transition hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving || isProcessingImage}
-                  className="h-8 rounded-lg bg-amber-400 px-3.5 text-xs font-semibold text-black transition hover:bg-amber-300 disabled:opacity-50"
-                >
-                  {isSaving ? "Saving..." : "Save Quote"}
-                </button>
+            ) : (
+              <div className="mt-3.5 border-l-2 border-amber-400/55 pl-3.5">
+                <p className="text-[15px] font-medium leading-relaxed text-white sm:text-base">
+                  &ldquo;{champion.quote}&rdquo;
+                </p>
+                <p className="mt-1 text-[11px] text-white/45">
+                  Today&apos;s #1 spotlight · Resets daily
+                </p>
               </div>
-            </div>
-          </form>
-        ) : champion.quote ? (
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-medium leading-relaxed text-white sm:text-base">
-              &ldquo;{champion.quote}&rdquo;
+            )
+          ) : champion.isSelf ? (
+            <p className="mt-2.5 text-xs text-white/55">
+              You&apos;re #1 today! Write today&apos;s quote and optionally attach
+              a temporary daily picture.
             </p>
-
-            {champion.imageUrl && (
-              <button
-                type="button"
-                onClick={() => setLightboxOpen(true)}
-                title="View temporary photo"
-                className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-amber-400/35 bg-[#09090b] transition hover:border-amber-300 sm:h-20 sm:w-20"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={champion.imageUrl}
-                  alt={`Temporary photo by @${champion.username}`}
-                  className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
-                />
-                <span className="absolute inset-x-0 bottom-0 bg-black/70 px-1 py-0.5 text-[9px] font-medium text-amber-200">
-                  Today
-                </span>
-              </button>
-            )}
-          </div>
-        ) : champion.isSelf ? (
-          <p className="mt-2.5 text-xs text-white/55">
-            You&apos;re #1 today! Write today&apos;s quote and optionally attach
-            a temporary daily picture.
-          </p>
-        ) : (
-          <p className="mt-2.5 text-xs text-white/45">
-            @{champion.username} hasn&apos;t written today&apos;s quote yet.
-          </p>
-        )}
+          ) : (
+            <p className="mt-2.5 text-xs text-white/45">
+              @{champion.username} hasn&apos;t written today&apos;s quote yet.
+            </p>
+          )}
+        </div>
       </div>
 
       {lightboxOpen && champion.imageUrl && (
@@ -312,7 +349,7 @@ export default function ChampionQuoteBanner({
               <img
                 src={champion.imageUrl}
                 alt={`Temporary quote photo by @${champion.username}`}
-                className="max-h-[65vh] w-full rounded-xl object-contain"
+                className="mx-auto max-h-[65vh] w-full rounded-xl object-contain"
               />
             </div>
 

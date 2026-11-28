@@ -16,9 +16,12 @@ export type ProfileEffectId =
   | "domain_shrine"
   | "golden_grace";
 
-export type CustomGifEffectValue = `gif:${string}`;
-export type ProfileEffectValue = ProfileEffectId | CustomGifEffectValue;
-export type ProfileEffectPreference = "auto" | "none" | ProfileEffectValue;
+export type ProfileEffectPreference = "auto" | "none" | ProfileEffectId;
+
+export type ProfileEffectBundle = {
+  effectPref: ProfileEffectPreference;
+  customGifUrl: string | null;
+};
 
 export type ProfileEffectCategory = "classic" | "anime_game";
 
@@ -36,22 +39,6 @@ export type ProfileEffectDefinition = {
   glowRgba: string;
   borderClass: string;
   badgeClass: string;
-};
-
-export type ProfileEffectVisual = {
-  id: ProfileEffectValue;
-  name: string;
-  description: string;
-  icon: string;
-  accentHex: string;
-  ringGradient: string;
-  glowRgba: string;
-  borderClass: string;
-  badgeClass: string;
-  category?: ProfileEffectCategory;
-  inspiration?: string;
-  achievementId?: string;
-  tier?: number;
 };
 
 export const PROFILE_EFFECTS: ProfileEffectDefinition[] = [
@@ -316,55 +303,22 @@ export const PROFILE_EFFECTS: ProfileEffectDefinition[] = [
   },
 ];
 
-export const CUSTOM_GIF_EFFECT_META: Omit<ProfileEffectVisual, "id"> = {
-  name: "Custom GIF",
-  description: "Your custom animated GIF or image background.",
-  icon: "🎞️",
-  accentHex: "#e879f9",
-  ringGradient:
-    "conic-gradient(from 0deg, #e879f9, #38bdf8, #34d399, #facc15, #e879f9)",
-  glowRgba: "rgba(232, 121, 249, 0.44)",
-  borderClass: "border-fuchsia-400/50",
-  badgeClass: "border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-200",
-};
-
+const BUNDLE_PREFIX = "STPE1:";
 const PREF_STORAGE_KEY = "studytracker_profile_effect_pref";
+const CUSTOM_GIF_STORAGE_KEY = "studytracker_profile_custom_gif";
 const RESOLVED_STORAGE_KEY = "studytracker_resolved_profile_effect";
+export const EFFECTS_DISABLED_STORAGE_KEY = "studytracker_effects_disabled";
 const MAX_CUSTOM_GIF_BYTES = Math.round(1.8 * 1024 * 1024); // 1.8 MB animated GIF
-const MAX_CUSTOM_STATIC_BYTES = 10 * 1024 * 1024;
-const MAX_CUSTOM_BG_DIM = 640;
-
-export function isCustomGifEffect(
-  value: unknown
-): value is CustomGifEffectValue {
-  return (
-    typeof value === "string" && value.startsWith("gif:data:image/")
-  );
-}
-
-export function extractCustomGifUrl(value: unknown): string | null {
-  if (!isCustomGifEffect(value)) return null;
-  return value.slice(4);
-}
+const MAX_CUSTOM_STATIC_BYTES = 20 * 1024 * 1024;
+const MAX_CUSTOM_BG_DIM = 480;
+const IMAGE_EXT_REGEX = /\.(png|jpe?g|webp|gif|bmp|avif|heic|heif)$/i;
+const GIF_BASE64_MAGIC = ";base64,R0lGOD";
 
 export function getProfileEffectById(
   id: string | null | undefined
 ): ProfileEffectDefinition | null {
   if (!id) return null;
   return PROFILE_EFFECTS.find((effect) => effect.id === id) ?? null;
-}
-
-export function getProfileEffectVisual(
-  value: ProfileEffectValue | string | null | undefined
-): ProfileEffectVisual | null {
-  if (!value) return null;
-  if (isCustomGifEffect(value)) {
-    return {
-      ...CUSTOM_GIF_EFFECT_META,
-      id: value,
-    };
-  }
-  return getProfileEffectById(value);
 }
 
 export function getProfileEffectForAchievement(
@@ -389,9 +343,73 @@ export function parseProfileEffectPreference(
 ): ProfileEffectPreference {
   if (!raw) return "auto";
   if (raw === "auto" || raw === "none") return raw;
-  if (isCustomGifEffect(raw)) return raw;
   const matched = getProfileEffectById(raw);
   return matched ? matched.id : "auto";
+}
+
+export function encodeProfileEffectBundle(
+  effectPref: ProfileEffectPreference,
+  customGifUrl: string | null
+): string {
+  const safeGif =
+    typeof customGifUrl === "string" && customGifUrl.startsWith("data:image/")
+      ? customGifUrl
+      : null;
+
+  if (!safeGif) {
+    return effectPref;
+  }
+
+  return `${BUNDLE_PREFIX}${JSON.stringify({
+    e: effectPref,
+    g: safeGif,
+  })}`;
+}
+
+export function parseProfileEffectBundle(
+  raw: string | null | undefined
+): ProfileEffectBundle {
+  if (!raw) {
+    return { effectPref: "auto", customGifUrl: null };
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { effectPref: "auto", customGifUrl: null };
+  }
+
+  if (trimmed.startsWith(BUNDLE_PREFIX)) {
+    try {
+      const parsed = JSON.parse(trimmed.slice(BUNDLE_PREFIX.length)) as {
+        e?: unknown;
+        g?: unknown;
+      };
+      const effectPref =
+        typeof parsed?.e === "string"
+          ? parseProfileEffectPreference(parsed.e)
+          : "auto";
+      const customGifUrl =
+        typeof parsed?.g === "string" && parsed.g.startsWith("data:image/")
+          ? parsed.g
+          : null;
+      return { effectPref, customGifUrl };
+    } catch {
+      return { effectPref: "auto", customGifUrl: null };
+    }
+  }
+
+  // Upgrade legacy `gif:data:image/...` strings smoothly so users keep both
+  if (trimmed.startsWith("gif:data:image/")) {
+    return {
+      effectPref: "auto",
+      customGifUrl: trimmed.slice(4),
+    };
+  }
+
+  return {
+    effectPref: parseProfileEffectPreference(trimmed),
+    customGifUrl: null,
+  };
 }
 
 export function getHighestUnlockedEffect(
@@ -412,19 +430,12 @@ export function getHighestUnlockedEffect(
 export function resolveActiveProfileEffect(
   preference: ProfileEffectPreference | string | null | undefined,
   unlockedAchievementIds: Iterable<string>
-): ProfileEffectVisual | null {
+): ProfileEffectDefinition | null {
   const unlockedSet = new Set(unlockedAchievementIds);
   const pref = parseProfileEffectPreference(preference);
 
   if (pref === "none") {
     return null;
-  }
-
-  if (isCustomGifEffect(pref)) {
-    return {
-      ...CUSTOM_GIF_EFFECT_META,
-      id: pref,
-    };
   }
 
   if (pref !== "auto") {
@@ -437,41 +448,51 @@ export function resolveActiveProfileEffect(
   return getHighestUnlockedEffect(unlockedSet);
 }
 
-export function processCustomEffectFile(
-  file: File
-): Promise<CustomGifEffectValue> {
+function isLikelyImageFile(file: File): boolean {
+  if (file.type.startsWith("image/")) return true;
+  if (file.type === "" || file.type === "application/octet-stream") {
+    return true;
+  }
+  return IMAGE_EXT_REGEX.test(file.name || "");
+}
+
+function isLikelyGifFile(file: File): boolean {
+  return file.type === "image/gif" || /\.gif$/i.test(file.name || "");
+}
+
+function normalizeImageDataUrl(raw: string, forceGif: boolean): string {
+  if (raw.includes(GIF_BASE64_MAGIC)) {
+    return raw.replace(
+      /^data:[^;]*;base64,/i,
+      "data:image/gif;base64,"
+    );
+  }
+  if (forceGif && /^data:application\/octet-stream;base64,/i.test(raw)) {
+    return raw.replace(
+      /^data:application\/octet-stream;base64,/i,
+      "data:image/gif;base64,"
+    );
+  }
+  return raw;
+}
+
+export function processCustomGifFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    if (!file.type.startsWith("image/")) {
+    if (!isLikelyImageFile(file)) {
       reject(
         new Error("Please select an image or animated GIF (GIF, PNG, JPG, WebP).")
       );
       return;
     }
 
-    if (file.type === "image/gif") {
-      if (file.size > MAX_CUSTOM_GIF_BYTES) {
-        reject(new Error("Custom animated GIF background must be under 1.8 MB."));
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onerror = () => {
-        reject(new Error("Could not read the selected GIF."));
-      };
-      reader.onload = () => {
-        const result = reader.result;
-        if (typeof result === "string" && result.startsWith("data:image/")) {
-          resolve(`gif:${result}`);
-        } else {
-          reject(new Error("Invalid or unsupported GIF format."));
-        }
-      };
-      reader.readAsDataURL(file);
+    const declaredGif = isLikelyGifFile(file);
+    if (declaredGif && file.size > MAX_CUSTOM_GIF_BYTES) {
+      reject(new Error("Custom animated GIF must be under 1.8 MB."));
       return;
     }
 
-    if (file.size > MAX_CUSTOM_STATIC_BYTES) {
-      reject(new Error("Image must be smaller than 10 MB."));
+    if (!declaredGif && file.size > MAX_CUSTOM_STATIC_BYTES) {
+      reject(new Error("Image must be smaller than 20 MB."));
       return;
     }
 
@@ -480,6 +501,22 @@ export function processCustomEffectFile(
       reject(new Error("Could not read the selected image."));
     };
     reader.onload = () => {
+      const raw = reader.result;
+      if (typeof raw !== "string" || !raw.startsWith("data:")) {
+        reject(new Error("Invalid or unsupported image format."));
+        return;
+      }
+
+      const hasGifMagic = raw.includes(GIF_BASE64_MAGIC);
+      if (declaredGif || hasGifMagic) {
+        if (file.size > MAX_CUSTOM_GIF_BYTES) {
+          reject(new Error("Custom animated GIF must be under 1.8 MB."));
+          return;
+        }
+        resolve(normalizeImageDataUrl(raw, true));
+        return;
+      }
+
       const img = new Image();
       img.onerror = () => {
         reject(new Error("Invalid or unsupported image format."));
@@ -504,45 +541,62 @@ export function processCustomEffectFile(
         if (!dataUrl.startsWith("data:image/webp")) {
           dataUrl = canvas.toDataURL("image/jpeg", 0.78);
         }
-        resolve(`gif:${dataUrl}`);
+        resolve(dataUrl);
       };
-      img.src = reader.result as string;
+      img.src = raw;
     };
     reader.readAsDataURL(file);
   });
 }
 
-export function loadLocalProfileEffectPref(): ProfileEffectPreference {
-  if (typeof window === "undefined") return "auto";
+export function loadLocalProfileEffectBundle(): ProfileEffectBundle {
+  if (typeof window === "undefined") {
+    return { effectPref: "auto", customGifUrl: null };
+  }
   try {
-    return parseProfileEffectPreference(
-      window.localStorage.getItem(PREF_STORAGE_KEY)
-    );
+    const rawPref = window.localStorage.getItem(PREF_STORAGE_KEY);
+    const rawGif = window.localStorage.getItem(CUSTOM_GIF_STORAGE_KEY);
+    if (rawPref && rawPref.startsWith("gif:data:image/")) {
+      return {
+        effectPref: "auto",
+        customGifUrl: rawPref.slice(4),
+      };
+    }
+    return {
+      effectPref: parseProfileEffectPreference(rawPref),
+      customGifUrl:
+        rawGif && rawGif.startsWith("data:image/") ? rawGif : null,
+    };
   } catch {
-    return "auto";
+    return { effectPref: "auto", customGifUrl: null };
   }
 }
 
-export function saveLocalProfileEffectPref(pref: ProfileEffectPreference) {
+export function saveLocalProfileEffectBundle(bundle: ProfileEffectBundle) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(PREF_STORAGE_KEY, pref);
+    window.localStorage.setItem(PREF_STORAGE_KEY, bundle.effectPref);
+    if (bundle.customGifUrl) {
+      window.localStorage.setItem(CUSTOM_GIF_STORAGE_KEY, bundle.customGifUrl);
+    } else {
+      window.localStorage.removeItem(CUSTOM_GIF_STORAGE_KEY);
+    }
   } catch {
     // Ignore storage quota / private-mode errors
   }
 }
 
-export function loadResolvedActiveEffectId(): ProfileEffectValue | null {
+export function loadResolvedActiveEffectId(): ProfileEffectId | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(RESOLVED_STORAGE_KEY);
-    return getProfileEffectVisual(raw)?.id ?? null;
+    return getProfileEffectById(raw)?.id ?? null;
   } catch {
     return null;
   }
 }
 
-export function saveResolvedActiveEffectId(effectId: ProfileEffectValue | null) {
+export function saveResolvedActiveEffectId(effectId: ProfileEffectId | null) {
   if (typeof window === "undefined") return;
   try {
     if (effectId) {
@@ -555,16 +609,53 @@ export function saveResolvedActiveEffectId(effectId: ProfileEffectValue | null) 
   }
 }
 
-export function notifyProfileEffectUpdated(
-  pref: ProfileEffectPreference,
-  resolvedEffectId: ProfileEffectValue | null
+export function notifyProfileEffectBundleUpdated(
+  bundle: ProfileEffectBundle,
+  resolvedEffectId: ProfileEffectId | null
 ) {
-  saveLocalProfileEffectPref(pref);
+  saveLocalProfileEffectBundle(bundle);
   saveResolvedActiveEffectId(resolvedEffectId);
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("profile-effect-updated", {
-        detail: { preference: pref, resolvedEffectId },
+        detail: {
+          preference: bundle.effectPref,
+          customGifUrl: bundle.customGifUrl,
+          resolvedEffectId,
+        },
+      })
+    );
+  }
+}
+
+export function loadEffectsDisabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(EFFECTS_DISABLED_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveEffectsDisabled(disabled: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    if (disabled) {
+      window.localStorage.setItem(EFFECTS_DISABLED_STORAGE_KEY, "1");
+    } else {
+      window.localStorage.removeItem(EFFECTS_DISABLED_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export function notifyEffectsDisabledUpdated(disabled: boolean) {
+  saveEffectsDisabled(disabled);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("profile-effects-disabled-updated", {
+        detail: { disabled },
       })
     );
   }

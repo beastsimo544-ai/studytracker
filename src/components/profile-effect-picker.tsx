@@ -1,20 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import CustomGifBanner from "@/components/custom-gif-banner";
 import { useNotifications } from "@/components/notification-provider";
 import ProfileEffectOverlay from "@/components/profile-effect-overlay";
+import { useEffectsDisabled } from "@/components/use-effects-disabled";
 import UserAvatar from "@/components/user-avatar";
 import type { Achievement } from "@/lib/achievements";
 import {
-  getProfileEffectVisual,
-  isCustomGifEffect,
-  notifyProfileEffectUpdated,
-  processCustomEffectFile,
+  encodeProfileEffectBundle,
+  getProfileEffectById,
+  notifyEffectsDisabledUpdated,
+  notifyProfileEffectBundleUpdated,
+  processCustomGifFile,
   PROFILE_EFFECTS,
   resolveActiveProfileEffect,
+  type ProfileEffectBundle,
   type ProfileEffectCategory,
+  type ProfileEffectId,
   type ProfileEffectPreference,
-  type ProfileEffectValue,
 } from "@/lib/profile-effects";
 import { supabase } from "@/lib/supabase";
 
@@ -27,9 +31,10 @@ type ProfileEffectPickerProps = {
   avatarUrl: string | null;
   achievements: Achievement[];
   preference: ProfileEffectPreference;
-  onPreferenceChange: (
-    nextPref: ProfileEffectPreference,
-    resolvedEffectId: ProfileEffectValue | null
+  customGifUrl: string | null;
+  onBundleChange: (
+    nextBundle: ProfileEffectBundle,
+    resolvedEffectId: ProfileEffectId | null
   ) => void;
 };
 
@@ -42,15 +47,17 @@ export default function ProfileEffectPicker({
   avatarUrl,
   achievements,
   preference,
-  onPreferenceChange,
+  customGifUrl,
+  onBundleChange,
 }: ProfileEffectPickerProps) {
   const { toast } = useNotifications();
-  const customFileInputRef = useRef<HTMLInputElement | null>(null);
+  const effectsDisabled = useEffectsDisabled();
+  const customFileInputId = useId();
   const [categoryFilter, setCategoryFilter] = useState<
     "all" | ProfileEffectCategory
   >("all");
   const [previewLockedId, setPreviewLockedId] =
-    useState<ProfileEffectValue | null>(null);
+    useState<ProfileEffectId | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isProcessingCustom, setIsProcessingCustom] = useState(false);
   const [customError, setCustomError] = useState("");
@@ -81,35 +88,64 @@ export default function ProfileEffectPicker({
     preference,
     unlockedAchievementIds
   );
-  const previewEffect = previewLockedId
-    ? getProfileEffectVisual(previewLockedId)
-    : activeEffect;
+  const previewEffect = effectsDisabled
+    ? null
+    : previewLockedId
+      ? getProfileEffectById(previewLockedId)
+      : activeEffect;
 
   const unlockedBadges = achievements.filter((a) => a.unlocked);
   const unlockedEffectsCount = PROFILE_EFFECTS.filter((e) =>
     unlockedSet.has(e.achievementId)
   ).length;
-  const isCustomActive = isCustomGifEffect(preference);
 
   const visibleEffects = PROFILE_EFFECTS.filter((effect) =>
     categoryFilter === "all" ? true : effect.category === categoryFilter
   );
 
-  const persistPreference = async (nextPref: ProfileEffectPreference) => {
+  const handleToggleEffectsDisabled = () => {
+    const nextDisabled = !effectsDisabled;
+    notifyEffectsDisabledUpdated(nextDisabled);
+    if (nextDisabled) {
+      toast.info(
+        "Distraction-free mode enabled",
+        "All profile effects and GIF panels are now hidden for you."
+      );
+    } else {
+      toast.success("Profile effects re-enabled");
+    }
+  };
+
+  const persistBundle = async (
+    nextEffectPref: ProfileEffectPreference,
+    nextCustomGifUrl: string | null,
+    toastLabel?: "gif_saved" | "gif_removed" | "effect"
+  ) => {
     setPreviewLockedId(null);
     setCustomError("");
-    const nextResolved =
-      resolveActiveProfileEffect(nextPref, unlockedAchievementIds)?.id ?? null;
 
-    notifyProfileEffectUpdated(nextPref, nextResolved);
-    onPreferenceChange(nextPref, nextResolved);
+    const nextBundle: ProfileEffectBundle = {
+      effectPref: nextEffectPref,
+      customGifUrl: nextCustomGifUrl,
+    };
+    const nextResolved =
+      resolveActiveProfileEffect(nextEffectPref, unlockedAchievementIds)?.id ??
+      null;
+
+    notifyProfileEffectBundleUpdated(nextBundle, nextResolved);
+    onBundleChange(nextBundle, nextResolved);
+
+    if (effectsDisabled && (nextEffectPref !== "none" || nextCustomGifUrl)) {
+      notifyEffectsDisabledUpdated(false);
+    }
 
     if (!userId) return;
 
     setIsSaving(true);
+    const encoded = encodeProfileEffectBundle(nextEffectPref, nextCustomGifUrl);
     const { error } = await supabase
       .from("profiles")
-      .update({ profile_effect: nextPref })
+      .update({ profile_effect: encoded })
       .eq("user_id", userId);
     setIsSaving(false);
 
@@ -122,14 +158,21 @@ export default function ProfileEffectPicker({
       return;
     }
 
-    if (nextPref === "none") {
-      toast.info("Profile effect turned off");
-    } else if (nextPref === "auto") {
+    if (toastLabel === "gif_saved") {
+      toast.success("🎞️ Left profile GIF updated!");
+      return;
+    }
+    if (toastLabel === "gif_removed") {
+      toast.info("Profile GIF removed");
+      return;
+    }
+
+    if (nextEffectPref === "none") {
+      toast.info("Background effect turned off");
+    } else if (nextEffectPref === "auto") {
       toast.success("Auto effect enabled", "Shows your highest unlocked effect.");
-    } else if (isCustomGifEffect(nextPref)) {
-      toast.success("🎞️ Custom animated background equipped!");
     } else {
-      const chosen = getProfileEffectVisual(nextPref);
+      const chosen = getProfileEffectById(nextEffectPref);
       if (chosen) {
         toast.success(`${chosen.icon} ${chosen.name} equipped!`);
       }
@@ -139,29 +182,57 @@ export default function ProfileEffectPicker({
   const handleCustomGifUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
+    const input = e.currentTarget;
+    const file = input.files?.[0];
     if (!file) return;
 
     setCustomError("");
     setIsProcessingCustom(true);
     try {
-      const value = await processCustomEffectFile(file);
-      await persistPreference(value);
+      const dataUrl = await processCustomGifFile(file);
+      await persistBundle(preference, dataUrl, "gif_saved");
     } catch (err) {
       setCustomError(
-        err instanceof Error ? err.message : "Could not process custom background."
+        err instanceof Error ? err.message : "Could not process selected GIF."
       );
     } finally {
+      input.value = "";
       setIsProcessingCustom(false);
     }
   };
 
   const content = (
     <div className="space-y-4">
+      {/* Global Distraction-Free Mode Toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#09090b] px-3.5 py-2.5">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-white">
+            Distraction-free mode (Disable all effects)
+          </p>
+          <p className="mt-0.5 text-[11px] text-white/50">
+            Hides all animated background effects, avatar rings, and profile
+            GIFs for a clean minimal view.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          role="switch"
+          aria-checked={effectsDisabled}
+          onClick={handleToggleEffectsDisabled}
+          className={`inline-flex h-8 shrink-0 items-center gap-2 rounded-xl border px-3 text-xs font-semibold transition ${
+            effectsDisabled
+              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+              : "border-white/15 bg-white/[0.05] text-white/80 hover:border-white/30 hover:text-white"
+          }`}
+        >
+          <span>{effectsDisabled ? "Effects Off ✓" : "Disable All"}</span>
+        </button>
+      </div>
+
       {/* Live Discord-style Profile Preview Card */}
       <div
-        className={`relative overflow-hidden rounded-2xl border bg-[#09090b] p-4 transition-colors sm:p-5 ${
+        className={`relative overflow-hidden rounded-2xl border bg-[#09090b] transition-colors ${
           previewEffect ? previewEffect.borderClass : "border-white/[0.08]"
         }`}
       >
@@ -170,63 +241,77 @@ export default function ProfileEffectPicker({
           intensity="strong"
         />
 
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3.5">
-            <UserAvatar
-              avatarUrl={avatarUrl}
-              name={username || "you"}
-              size="lg"
-              effectId={previewEffect?.id ?? null}
+        <div className="relative z-10 flex flex-col gap-3.5 p-4 sm:flex-row sm:items-center sm:p-5">
+          {!effectsDisabled && customGifUrl && (
+            <CustomGifBanner
+              gifUrl={customGifUrl}
+              username={username}
+              sizeClass="h-28 w-full sm:h-24 sm:w-28"
             />
+          )}
 
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="truncate font-mono text-sm font-bold text-white sm:text-base">
-                  @{username || "student"}
-                </span>
-                {unlockedBadges.length > 0 && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[11px]">
-                    {unlockedBadges.map((b) => (
-                      <span key={b.id} title={b.title}>
-                        {b.icon}
-                      </span>
-                    ))}
-                  </span>
-                )}
-              </div>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3.5">
+              <UserAvatar
+                avatarUrl={avatarUrl}
+                name={username || "you"}
+                size="lg"
+                effectId={previewEffect?.id ?? null}
+              />
 
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                {previewLockedId && previewEffect ? (
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${previewEffect.badgeClass}`}
-                  >
-                    🔒 Previewing locked: {previewEffect.name}
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="truncate font-mono text-sm font-bold text-white sm:text-base">
+                    @{username || "student"}
                   </span>
-                ) : previewEffect ? (
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${previewEffect.badgeClass}`}
-                  >
-                    {previewEffect.icon} Active: {previewEffect.name}
-                    {preference === "auto" ? " (Auto)" : ""}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center rounded-full border border-white/15 bg-white/[0.05] px-2.5 py-0.5 text-[11px] text-white/60">
-                    No effect equipped
-                  </span>
-                )}
+                  {unlockedBadges.length > 0 && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[11px]">
+                      {unlockedBadges.map((b) => (
+                        <span key={b.id} title={b.title}>
+                          {b.icon}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {effectsDisabled ? (
+                    <span className="inline-flex items-center rounded-full border border-white/15 bg-white/[0.05] px-2.5 py-0.5 text-[11px] text-white/65">
+                      Distraction-free mode ON · all effects hidden
+                    </span>
+                  ) : previewLockedId && previewEffect ? (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${previewEffect.badgeClass}`}
+                    >
+                      🔒 Previewing locked: {previewEffect.name}
+                    </span>
+                  ) : previewEffect ? (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${previewEffect.badgeClass}`}
+                    >
+                      {previewEffect.icon} Active: {previewEffect.name}
+                      {preference === "auto" ? " (Auto)" : ""}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full border border-white/15 bg-white/[0.05] px-2.5 py-0.5 text-[11px] text-white/60">
+                      No background effect
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          {previewLockedId && (
-            <button
-              type="button"
-              onClick={() => setPreviewLockedId(null)}
-              className="h-8 rounded-lg border border-white/15 bg-black/40 px-3 text-xs font-medium text-white/80 transition hover:text-white"
-            >
-              Reset preview
-            </button>
-          )}
+            {!effectsDisabled && previewLockedId && (
+              <button
+                type="button"
+                onClick={() => setPreviewLockedId(null)}
+                className="h-8 rounded-lg border border-white/15 bg-black/40 px-3 text-xs font-medium text-white/80 transition hover:text-white"
+              >
+                Reset preview
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -236,7 +321,7 @@ export default function ProfileEffectPicker({
           <button
             type="button"
             disabled={isSaving || isProcessingCustom}
-            onClick={() => persistPreference("auto")}
+            onClick={() => persistBundle("auto", customGifUrl, "effect")}
             className={`h-8 rounded-xl border px-3 text-xs font-semibold transition ${
               preference === "auto"
                 ? "border-white/35 bg-white text-black"
@@ -249,14 +334,14 @@ export default function ProfileEffectPicker({
           <button
             type="button"
             disabled={isSaving || isProcessingCustom}
-            onClick={() => persistPreference("none")}
+            onClick={() => persistBundle("none", customGifUrl, "effect")}
             className={`h-8 rounded-xl border px-3 text-xs font-semibold transition ${
               preference === "none"
                 ? "border-white/35 bg-white text-black"
                 : "border-white/12 bg-[#09090b] text-white/75 hover:border-white/25 hover:text-white"
             }`}
           >
-            None
+            No Background Effect
           </button>
         </div>
 
@@ -265,14 +350,15 @@ export default function ProfileEffectPicker({
         </span>
       </div>
 
-      {/* Custom Animated GIF / Image Background Upload */}
+      {/* Left-Side Animated GIF Upload (coexists cleanly with unlocked background effects) */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/[0.05] px-3.5 py-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-white">
-            🎞️ Custom GIF / Background Effect
+            🎞️ Left-Side Animated GIF
           </p>
           <p className="mt-0.5 text-[11px] text-white/55">
-            Upload an animated GIF (up to 1.8 MB) or image as your card background.
+            Displays cleanly on the left side of your card while your unlocked
+            background effect stays active (up to 1.8 MB).
           </p>
           {customError && (
             <p className="mt-1 text-[11px] text-red-400">{customError}</p>
@@ -281,34 +367,37 @@ export default function ProfileEffectPicker({
 
         <div className="flex flex-wrap items-center gap-2">
           <input
-            ref={customFileInputRef}
+            id={customFileInputId}
             type="file"
-            accept="image/gif,image/webp,image/png,image/jpeg"
+            accept="image/*"
+            disabled={isSaving || isProcessingCustom}
             onChange={handleCustomGifUpload}
-            className="hidden"
+            className="sr-only"
           />
 
-          <button
-            type="button"
-            disabled={isSaving || isProcessingCustom}
-            onClick={() => customFileInputRef.current?.click()}
-            className="h-8 rounded-lg border border-fuchsia-400/35 bg-fuchsia-500/15 px-3 text-xs font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/25 disabled:opacity-50"
+          <label
+            htmlFor={customFileInputId}
+            className={`inline-flex h-8 cursor-pointer items-center rounded-lg border border-fuchsia-400/35 bg-fuchsia-500/15 px-3 text-xs font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/25 ${
+              isSaving || isProcessingCustom
+                ? "pointer-events-none opacity-50"
+                : ""
+            }`}
           >
             {isProcessingCustom
               ? "Processing..."
-              : isCustomActive
-                ? "Change GIF Background"
-                : "Upload GIF Background"}
-          </button>
+              : customGifUrl
+                ? "Change Left GIF"
+                : "Upload Left GIF"}
+          </label>
 
-          {isCustomActive && (
+          {customGifUrl && (
             <button
               type="button"
               disabled={isSaving || isProcessingCustom}
-              onClick={() => persistPreference("auto")}
+              onClick={() => persistBundle(preference, null, "gif_removed")}
               className="h-8 rounded-lg border border-white/15 px-3 text-xs text-white/75 transition hover:border-red-400/35 hover:text-red-300 disabled:opacity-50"
             >
-              Remove Custom GIF
+              Remove GIF
             </button>
           )}
         </div>
@@ -368,7 +457,7 @@ export default function ProfileEffectPicker({
               }}
               onClick={() => {
                 if (isUnlocked) {
-                  persistPreference(effect.id);
+                  persistBundle(effect.id, customGifUrl, "effect");
                 } else {
                   setPreviewLockedId((prev) =>
                     prev === effect.id ? null : effect.id
@@ -387,6 +476,7 @@ export default function ProfileEffectPicker({
             >
               <ProfileEffectOverlay
                 effectId={effect.id}
+                ignoreGlobalDisable
                 intensity={isEquipped || isPreviewingLocked ? "strong" : "normal"}
               />
 
@@ -459,8 +549,9 @@ export default function ProfileEffectPicker({
               Profile Effects ✨
             </h2>
             <p className="mt-0.5 text-xs text-white/55">
-              Equip Classic or Anime &amp; Game effects unlocked from
-              achievements, or upload your own animated GIF background.
+              Equip your unlocked Classic or Anime &amp; Game background effect,
+              pair it with a sharp left-side GIF, or switch to distraction-free
+              mode.
             </p>
           </div>
 

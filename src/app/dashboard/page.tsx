@@ -10,8 +10,8 @@ import StudyHeatmap from "@/components/study-heatmap";
 import { evaluateAchievements } from "@/lib/achievements";
 import {
   getProfileEffectsForAchievement,
-  loadLocalProfileEffectPref,
-  parseProfileEffectPreference,
+  loadLocalProfileEffectBundle,
+  parseProfileEffectBundle,
   resolveActiveProfileEffect,
   saveResolvedActiveEffectId,
   type ProfileEffectPreference,
@@ -61,6 +61,7 @@ export default function Dashboard() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [showShareCard, setShowShareCard] = useState(false);
   const [effectPref, setEffectPref] = useState<ProfileEffectPreference>("auto");
+  const [customGifUrl, setCustomGifUrl] = useState<string | null>(null);
   const [isEffectPickerOpen, setIsEffectPickerOpen] = useState(false);
 
   const [exams, setExams] = useState<ExamItem[]>([]);
@@ -142,10 +143,11 @@ export default function Dashboard() {
         resolvedProfile = fullProfileRes.data;
       }
 
-      const nextEffectPref = resolvedProfile?.profile_effect
-        ? parseProfileEffectPreference(resolvedProfile.profile_effect)
-        : loadLocalProfileEffectPref();
-      setEffectPref(nextEffectPref);
+      const resolvedBundle = resolvedProfile?.profile_effect
+        ? parseProfileEffectBundle(resolvedProfile.profile_effect)
+        : loadLocalProfileEffectBundle();
+      setEffectPref(resolvedBundle.effectPref);
+      setCustomGifUrl(resolvedBundle.customGifUrl);
 
       if (resolvedProfile) {
         if (typeof resolvedProfile.daily_goal_minutes === "number") {
@@ -611,9 +613,13 @@ export default function Dashboard() {
     const handleEffectUpdated = (event: Event) => {
       const custom = event as CustomEvent<{
         preference?: ProfileEffectPreference;
+        customGifUrl?: string | null;
       }>;
       if (custom.detail?.preference) {
         setEffectPref(custom.detail.preference);
+      }
+      if (custom.detail && "customGifUrl" in custom.detail) {
+        setCustomGifUrl(custom.detail.customGifUrl ?? null);
       }
     };
     window.addEventListener("profile-effect-updated", handleEffectUpdated);
@@ -1291,7 +1297,11 @@ export default function Dashboard() {
         avatarUrl={avatarUrl}
         achievements={achievements}
         preference={effectPref}
-        onPreferenceChange={(nextPref) => setEffectPref(nextPref)}
+        customGifUrl={customGifUrl}
+        onBundleChange={(nextBundle) => {
+          setEffectPref(nextBundle.effectPref);
+          setCustomGifUrl(nextBundle.customGifUrl);
+        }}
       />
     </main>
   );

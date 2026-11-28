@@ -1,15 +1,16 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { useEffectsDisabled } from "@/components/use-effects-disabled";
 import {
-  extractCustomGifUrl,
-  getProfileEffectVisual,
-  type ProfileEffectValue,
+  getProfileEffectById,
+  type ProfileEffectId,
 } from "@/lib/profile-effects";
 
 type ProfileEffectOverlayProps = {
-  effectId: ProfileEffectValue | null | undefined;
+  effectId: ProfileEffectId | null | undefined;
   intensity?: "normal" | "strong";
+  ignoreGlobalDisable?: boolean;
 };
 
 const RISING_PARTICLES = [
@@ -76,10 +77,15 @@ function FourPointStar({
 
 export function ProfileEffectPill({
   effectId,
+  ignoreGlobalDisable = false,
 }: {
-  effectId: ProfileEffectValue | null | undefined;
+  effectId: ProfileEffectId | null | undefined;
+  ignoreGlobalDisable?: boolean;
 }) {
-  const effect = getProfileEffectVisual(effectId);
+  const effectsDisabled = useEffectsDisabled();
+  if (effectsDisabled && !ignoreGlobalDisable) return null;
+
+  const effect = getProfileEffectById(effectId);
   if (!effect) return null;
 
   return (
@@ -96,31 +102,12 @@ export function ProfileEffectPill({
 export default function ProfileEffectOverlay({
   effectId,
   intensity = "normal",
+  ignoreGlobalDisable = false,
 }: ProfileEffectOverlayProps) {
-  if (!effectId) return null;
+  const effectsDisabled = useEffectsDisabled();
+  if (!effectId || (effectsDisabled && !ignoreGlobalDisable)) return null;
 
   const isStrong = intensity === "strong";
-  const customGifUrl = extractCustomGifUrl(effectId);
-
-  if (customGifUrl) {
-    return (
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]"
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={customGifUrl}
-          alt=""
-          className={`h-full w-full object-cover ${
-            isStrong ? "opacity-60" : "opacity-45"
-          }`}
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#09090b]/82 via-[#09090b]/50 to-[#09090b]/72" />
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-fuchsia-400/50 via-sky-300/70 to-emerald-400/50" />
-      </div>
-    );
-  }
 
   return (
     <div

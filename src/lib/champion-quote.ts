@@ -1,8 +1,10 @@
 const QUOTE_PREFIX = "STQ1:";
 const MAX_QUOTE_CHARS = 140;
 const MAX_IMAGE_DIM_PX = 420;
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_STATIC_BYTES = 20 * 1024 * 1024;
 const MAX_GIF_BYTES = Math.round(1.5 * 1024 * 1024);
+const IMAGE_EXT_REGEX = /\.(png|jpe?g|webp|gif|bmp|avif|heic|heif)$/i;
+const GIF_BASE64_MAGIC = ";base64,R0lGOD";
 
 export type ChampionQuoteContent = {
   text: string | null;
@@ -114,37 +116,49 @@ export function parseDailyChampionQuote(
   };
 }
 
+function isLikelyImageFile(file: File): boolean {
+  if (file.type.startsWith("image/")) return true;
+  if (file.type === "" || file.type === "application/octet-stream") {
+    return true;
+  }
+  return IMAGE_EXT_REGEX.test(file.name || "");
+}
+
+function isLikelyGifFile(file: File): boolean {
+  return file.type === "image/gif" || /\.gif$/i.test(file.name || "");
+}
+
+function normalizeImageDataUrl(raw: string, forceGif: boolean): string {
+  if (raw.includes(GIF_BASE64_MAGIC)) {
+    return raw.replace(
+      /^data:[^;]*;base64,/i,
+      "data:image/gif;base64,"
+    );
+  }
+  if (forceGif && /^data:application\/octet-stream;base64,/i.test(raw)) {
+    return raw.replace(
+      /^data:application\/octet-stream;base64,/i,
+      "data:image/gif;base64,"
+    );
+  }
+  return raw;
+}
+
 export function resizeQuoteImageFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    if (!file.type.startsWith("image/")) {
+    if (!isLikelyImageFile(file)) {
       reject(new Error("Please select an image file (PNG, JPG, WebP, or GIF)."));
       return;
     }
 
-    if (file.type === "image/gif") {
-      if (file.size > MAX_GIF_BYTES) {
-        reject(new Error("Animated GIF quote picture must be under 1.5 MB."));
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onerror = () => {
-        reject(new Error("Could not read the selected GIF."));
-      };
-      reader.onload = () => {
-        const result = reader.result;
-        if (typeof result === "string" && result.startsWith("data:image/")) {
-          resolve(result);
-        } else {
-          reject(new Error("Invalid or unsupported GIF format."));
-        }
-      };
-      reader.readAsDataURL(file);
+    const declaredGif = isLikelyGifFile(file);
+    if (declaredGif && file.size > MAX_GIF_BYTES) {
+      reject(new Error("Animated GIF quote picture must be under 1.5 MB."));
       return;
     }
 
-    if (file.size > MAX_FILE_BYTES) {
-      reject(new Error("Image must be smaller than 10 MB."));
+    if (!declaredGif && file.size > MAX_STATIC_BYTES) {
+      reject(new Error("Image must be smaller than 20 MB."));
       return;
     }
 
@@ -155,6 +169,22 @@ export function resizeQuoteImageFile(file: File): Promise<string> {
     };
 
     reader.onload = () => {
+      const raw = reader.result;
+      if (typeof raw !== "string" || !raw.startsWith("data:")) {
+        reject(new Error("Invalid or unsupported image format."));
+        return;
+      }
+
+      const hasGifMagic = raw.includes(GIF_BASE64_MAGIC);
+      if (declaredGif || hasGifMagic) {
+        if (file.size > MAX_GIF_BYTES) {
+          reject(new Error("Animated GIF quote picture must be under 1.5 MB."));
+          return;
+        }
+        resolve(normalizeImageDataUrl(raw, true));
+        return;
+      }
+
       const img = new Image();
 
       img.onerror = () => {
@@ -187,7 +217,7 @@ export function resizeQuoteImageFile(file: File): Promise<string> {
         resolve(dataUrl);
       };
 
-      img.src = reader.result as string;
+      img.src = raw;
     };
 
     reader.readAsDataURL(file);

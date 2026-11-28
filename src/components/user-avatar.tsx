@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffectsDisabled } from "@/components/use-effects-disabled";
 import {
-  getProfileEffectVisual,
-  type ProfileEffectValue,
+  getProfileEffectById,
+  type ProfileEffectId,
 } from "@/lib/profile-effects";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg";
@@ -12,7 +13,8 @@ type UserAvatarProps = {
   name?: string | null;
   size?: AvatarSize;
   className?: string;
-  effectId?: ProfileEffectValue | null;
+  effectId?: ProfileEffectId | null;
+  ignoreGlobalDisable?: boolean;
 };
 
 const SIZE_CLASSES: Record<AvatarSize, string> = {
@@ -45,11 +47,16 @@ export default function UserAvatar({
   size = "md",
   className = "",
   effectId = null,
+  ignoreGlobalDisable = false,
 }: UserAvatarProps) {
+  const effectsDisabled = useEffectsDisabled();
   const cleanName = (name || "?").replace(/^@+/, "").trim();
   const initial = (cleanName[0] || "?").toUpperCase();
   const sizeClass = SIZE_CLASSES[size];
-  const effect = getProfileEffectVisual(effectId);
+  const effect =
+    effectsDisabled && !ignoreGlobalDisable
+      ? null
+      : getProfileEffectById(effectId);
 
   const innerBorderClass = effect
     ? "ring-2 ring-[#111113]"
