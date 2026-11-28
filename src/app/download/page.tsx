@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useNotifications } from "@/components/notification-provider";
+import SiteFooter from "@/components/site-footer";
 
 export default function DownloadPage() {
   const { toast } = useNotifications();
@@ -34,7 +35,8 @@ export default function DownloadPage() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-12">
+    <div className="flex flex-1 flex-col">
+      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6 sm:py-12">
       {/* HERO DOWNLOAD CARD */}
       <section className="rounded-2xl border border-white/[0.08] bg-[#111113] p-5 sm:p-8">
         <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
@@ -276,6 +278,8 @@ export default function DownloadPage() {
           </li>
         </ol>
       </section>
-    </main>
+      </main>
+      {!isNativeApp && <SiteFooter />}
+    </div>
   );
 }

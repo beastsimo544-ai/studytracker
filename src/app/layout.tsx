@@ -26,11 +26,11 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default:
-      "StudyTracker — Free Study Time Tracker, Pomodoro Timer & Friends Leaderboard",
+      "StudyTracker — Study Time Tracker, Pomodoro Timer & Friends Leaderboard",
     template: "%s | StudyTracker",
   },
   description:
-    "Free online study tracker and Android app for students. Track study hours by subject, focus with Pomodoro & Zen timers, build daily streaks, count down to exams, and compete with friends on live leaderboards.",
+    "Online study tracker and Android app for students. Track study hours by subject, focus with Pomodoro & Zen timers, guard screen time, count down to exams, and compete with friends on live leaderboards.",
   keywords: [
     "study tracker",
     "study time tracker",
@@ -52,7 +52,7 @@ export const metadata: Metadata = {
     url: SITE_URL,
     siteName: "StudyTracker",
     title:
-      "StudyTracker — Free Study Time Tracker, Pomodoro Timer & Friends Leaderboard",
+      "StudyTracker — Study Time Tracker, Pomodoro Timer & Friends Leaderboard",
     description:
       "Track study hours by subject, stay consistent with streaks & Pomodoro blocks, and see what your friends are studying live.",
     images: [
@@ -67,7 +67,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary",
     title:
-      "StudyTracker — Free Study Time Tracker, Pomodoro Timer & Friends Leaderboard",
+      "StudyTracker — Study Time Tracker, Pomodoro Timer & Friends Leaderboard",
     description:
       "Track study hours, focus with Pomodoro & Zen Mode, and compete on daily & weekly study leaderboards with friends.",
     images: ["/playstore-icon-512.png"],

@@ -163,11 +163,21 @@ export default function Navbar() {
         { href: "/history", label: "History" },
         { href: "/friends", label: "Friends" },
         { href: "/profile", label: "Profile" },
-        ...(!isNativeApp ? [{ href: "/download", label: "App" }] : []),
+        ...(!isNativeApp
+          ? [
+              { href: "/pricing", label: "Pricing" },
+              { href: "/download", label: "App" },
+            ]
+          : []),
       ]
     : [
         { href: "/timer", label: "Timer" },
-        ...(!isNativeApp ? [{ href: "/download", label: "Download App" }] : []),
+        ...(!isNativeApp
+          ? [
+              { href: "/pricing", label: "Pricing" },
+              { href: "/download", label: "Download App" },
+            ]
+          : []),
       ];
 
   const mobileTabs = isLoggedIn
@@ -460,6 +470,19 @@ export default function Navbar() {
 
           {/* Mobile Top Right Actions (Clean & Uncluttered) */}
           <div className="flex items-center gap-2 md:hidden">
+            {!isNativeApp && !isLoggedIn && (
+              <Link
+                href="/pricing"
+                className={`flex h-8 items-center rounded-full border px-3 text-xs font-medium transition ${
+                  isActive("/pricing")
+                    ? "border-white/35 bg-white/15 text-white"
+                    : "border-white/15 bg-white/[0.03] text-white/80"
+                }`}
+              >
+                Pricing
+              </Link>
+            )}
+
             {!isNativeApp && (
               <Link
                 href="/download"
